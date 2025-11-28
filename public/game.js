@@ -1,34 +1,24 @@
 // ===================================
-// ১. ধ্রুবক (Constants) - SPEED INCREASED
+// ১. ধ্রুবক (Constants)
 // ===================================
 const GAME_WIDTH = 540;   
 const GAME_HEIGHT = 960;  
 
-const REEL_COUNT = 4;       
-const ROW_COUNT = 3;        
-const REEL_WIDTH = 105;     
-const SYMBOL_HEIGHT = 150;  
-const GAP_X = 15;           
-const GAP_Y = 15;          
+const REEL_COUNT = 4; ROW_COUNT = 3;        
+const REEL_WIDTH = 105; SYMBOL_HEIGHT = 150;  
+const GAP_X = 15; GAP_Y = 15;          
 
 const TOTAL_GRID_WIDTH = (REEL_WIDTH * REEL_COUNT) + (GAP_X * (REEL_COUNT - 1));
 const TOTAL_GRID_HEIGHT = (SYMBOL_HEIGHT * ROW_COUNT) + (GAP_Y * (ROW_COUNT - 1));
-
 const START_X = (GAME_WIDTH - TOTAL_GRID_WIDTH) / 2 + (REEL_WIDTH / 2); 
 const START_Y = 320; 
 
-// গেম ফাস্ট করার জন্য সময় কমানো হলো
-const SPIN_DURATION_PER_REEL = 200; // আগে 300 ছিল
-const SYMBOL_SHIFT_COUNT = 15; // আগে 20 ছিল
+const SPIN_DURATION_PER_REEL = 200; 
+const SYMBOL_SHIFT_COUNT = 15; 
 
-const BET_STEP = 1.00;    
-const MAX_BET = 1000.00;
-const MIN_BET = 1.00;
-
-const MIN_DEPOSIT = 50.00; 
-const MAX_DEPOSIT = 5000.00; 
-const MIN_WITHDRAW = 100.00; 
-const MAX_WITHDRAW = 50000.00; 
+const BET_STEP = 1.00; MAX_BET = 1000.00; MIN_BET = 1.00;
+const MIN_DEPOSIT = 50.00; MAX_DEPOSIT = 5000.00; 
+const MIN_WITHDRAW = 100.00; MAX_WITHDRAW = 50000.00; 
 
 const BKASH_NUMBERS = ["01911111101", "01911111102", "01911111103", "01911111104", "01911111105"];
 const NAGAD_NUMBERS = ["01922222201", "01922222202", "01922222203", "01922222204", "01922222205"];
@@ -53,6 +43,7 @@ class LoginScene extends Phaser.Scene {
         this.regContainer.setVisible(false);
         this.setupEventListeners();
     }
+
     createInputField(x, y, p, n, isP) { 
         const r = this.add.rectangle(x, y, 300, 50, 0x222222).setStrokeStyle(2, 0x777777);
         const t = this.add.text(x-140, y, p, { fontSize: '24px', fill: '#999' }).setOrigin(0, 0.5);
@@ -63,36 +54,53 @@ class LoginScene extends Phaser.Scene {
         });
         return c;
     }
+
+    createGlossyBtn(x, y, text, color, cb, w=200, h=60) {
+        const btnCont = this.add.container(x, y);
+        const bg = this.add.rectangle(0, 0, w, h, color).setInteractive({useHandCursor:true});
+        const shine = this.add.rectangle(0, -h/4, w, h/2, 0xFFFFFF, 0.2); // Glossy Effect
+        const txt = this.add.text(0, 0, text, { fontSize: '24px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
+        
+        btnCont.add([bg, shine, txt]);
+        bg.on('pointerdown', () => {
+            this.tweens.add({ targets: btnCont, scale: 0.9, duration: 50, yoyo: true });
+            this.time.delayedCall(100, cb);
+        });
+        return btnCont;
+    }
+
     createLoginUI(w, h) {
         const c = this.add.container(0, 0);
         c.add(this.add.text(w/2, 380, 'Member Login', { font: 'bold 36px Arial', fill: '#FFF' }).setOrigin(0.5));
         c.add(this.createInputField(w/2, 500, 'Username/Mobile', 'username', false));
         c.add(this.createInputField(w/2, 580, 'Password', 'password', true));
-        const btn = this.add.text(w/2, 720, ' LOGIN ', { fontSize: '36px', fill: '#000', backgroundColor: '#FFD700', padding: 15 }).setOrigin(0.5).setInteractive({useHandCursor:true}).setName('loginBtn');
+        c.add(this.createGlossyBtn(w/2, 720, 'LOGIN', 0xFFD700, this.handleLogin.bind(this)).setName('loginBtn'));
         const reg = this.add.text(w/2, 830, 'New User? Register Here', { fontSize: '24px', fill: '#888' }).setOrigin(0.5).setInteractive({useHandCursor:true}).setName('registerBtn');
-        c.add([btn, reg]); return c;
+        c.add(reg); return c;
     }
+
     createRegistrationUI(w, h) {
         const c = this.add.container(0, 0);
         c.add(this.add.text(w/2, 380, 'Registration', { font: 'bold 36px Arial', fill: '#FFF' }).setOrigin(0.5));
         c.add(this.createInputField(w/2, 500, 'Mobile Number', 'mobile', false));
         c.add(this.createInputField(w/2, 580, 'Set Username', 'newUsername', false));
         c.add(this.createInputField(w/2, 660, 'Set Password', 'newPassword', true));
-        const btn = this.add.text(w/2, 800, ' REGISTER ', { fontSize: '36px', fill: '#000', backgroundColor: '#00FF00', padding: 15 }).setOrigin(0.5).setInteractive({useHandCursor:true}).setName('confirmRegBtn');
+        c.add(this.createGlossyBtn(w/2, 800, 'REGISTER', 0x00FF00, this.handleRegistration.bind(this)).setName('confirmRegBtn'));
         const back = this.add.text(w/2, 900, '< Back to Login', { fontSize: '20px', fill: '#888' }).setOrigin(0.5).setInteractive({useHandCursor:true}).setName('backBtn');
-        c.add([btn, back]); return c;
+        c.add(back); return c;
     }
+    
     setupEventListeners() {
-        this.loginContainer.getByName('loginBtn').on('pointerdown', this.handleLogin, this);
-        this.regContainer.getByName('confirmRegBtn').on('pointerdown', this.handleRegistration, this);
         this.regContainer.getByName('backBtn').on('pointerdown', () => { this.loginContainer.setVisible(true); this.regContainer.setVisible(false); });
         this.loginContainer.getByName('registerBtn').on('pointerdown', () => { this.loginContainer.setVisible(false); this.regContainer.setVisible(true); });
     }
+    
     handleLogin() {
         if(!this.username || !this.password) return alert('Enter credentials');
         fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:this.username, password:this.password}) })
         .then(r=>r.json()).then(d=>{ if(d.success) this.scene.start('GameScene', {user:d.user}); else alert(d.message); });
     }
+    
     handleRegistration() {
         if(!this.mobile || !this.newUsername || !this.newPassword) return alert('Fill all fields');
         fetch('/api/register', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mobile:this.mobile, username:this.newUsername, password:this.newPassword}) })
@@ -111,14 +119,18 @@ class GameScene extends Phaser.Scene {
         this.multiplierIndex = 0; 
         this.consecutiveWins = 0;
         this.multiplierTexts = []; 
-        this.currentWinRate = 30; // Default Win Rate 30%
+        this.currentWinRate = 30; 
         this.forceWin = false;
         this.isMenuOpen = false;
+        this.notifTimer = null; // Notification Timer
     }
     
     init(data) {
-        if (data && data.user) { this.currentUser = data.user; this.balance = this.currentUser.balance; this.isAdmin = this.currentUser.username === 'admin'; }
-        else this.scene.start('LoginScene');
+        if (data && data.user) { 
+            this.currentUser = data.user; 
+            this.balance = this.currentUser.balance; 
+            this.isAdmin = this.currentUser.username === 'admin' || this.currentUser.isAdmin; 
+        } else this.scene.start('LoginScene');
     }
 
     preload() {
@@ -185,6 +197,35 @@ class GameScene extends Phaser.Scene {
         this.createMenuBar(width, height);
         this.input.once('pointerdown', () => { if (this.sound.context.state === 'suspended') this.sound.context.resume(); });
         this.updateUI();
+
+        // ** ADMIN NOTIFICATION POLLING **
+        if(this.isAdmin) {
+            this.notifTimer = this.time.addEvent({ delay: 10000, callback: this.checkNotifications, callbackScope: this, loop: true });
+        }
+    }
+
+    checkNotifications() {
+        fetch('/api/admin/notifications').then(r=>r.json()).then(d => {
+            if(d.count > 0) {
+                this.sound.play('win_sound'); // Play sound
+                const notif = this.add.text(this.scale.width/2, 100, `🔔 ${d.count} New Deposit!`, { fontSize: '24px', fill: '#FFF', backgroundColor: '#F00', padding: 10 }).setOrigin(0.5).setDepth(500);
+                this.tweens.add({ targets: notif, y: 150, duration: 500, yoyo: true, repeat: 3, onComplete: () => notif.destroy() });
+            }
+        });
+    }
+
+    createGlossyBtn(x, y, text, color, cb, w=200, h=50) {
+        const btnCont = this.add.container(x, y);
+        const bg = this.add.rectangle(0, 0, w, h, color).setInteractive({useHandCursor:true});
+        const shine = this.add.rectangle(0, -h/4, w, h/2, 0xFFFFFF, 0.2); 
+        const txt = this.add.text(0, 0, text, { fontSize: '20px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
+        btnCont.add([bg, shine, txt]);
+        bg.on('pointerdown', () => {
+            if(!this.isSpinning) this.toggleMenu();
+            this.tweens.add({ targets: btnCont, scale: 0.9, duration: 50, yoyo: true });
+            this.time.delayedCall(150, cb, [], this);
+        });
+        return btnCont;
     }
 
     updateBalanceOnServer(amount, callback) {
@@ -245,10 +286,8 @@ class GameScene extends Phaser.Scene {
         return total;
     }
 
-    // --- DYNAMIC WIN RATE LOGIC ---
     getSpinResult() {
         const grid = Array.from({length:REEL_COUNT},()=>[]);
-        // Use this.currentWinRate variable
         const isWin = this.forceWin || (Phaser.Math.Between(1,100) <= this.currentWinRate);
         const winRow = isWin ? Phaser.Math.Between(0, ROW_COUNT-1) : -1;
         const winSym = isWin ? Phaser.Utils.Array.GetRandom(SYMBOL_KEYS) : null;
@@ -275,7 +314,7 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // --- MENU, PROFILE, TELEGRAM & ADMIN ---
+    // --- UPDATED MENU WITH GLOSSY BUTTONS ---
     createMenuBar(w, h) {
         const c = this.add.container(-300, 0).setDepth(150); this.menuBar = c;
         c.add(this.add.rectangle(0, h/2, 300, h, 0x111111, 0.98).setOrigin(0, 0.5));
@@ -283,41 +322,29 @@ class GameScene extends Phaser.Scene {
         this.menuBalanceText = this.add.text(150, 100, `Tk ${this.balance.toFixed(2)}`, { fontSize: '18px', fill: '#FFF' }).setOrigin(0.5); c.add(this.menuBalanceText);
 
         let y = 180;
-        const bs = { fontSize: '20px', fill: '#000', padding: { x: 10, y: 8 } };
+        c.add(this.createGlossyBtn(150, y, 'DEPOSIT', 0x00FF00, ()=>this.showDepositPanel())); y+=70;
+        c.add(this.createGlossyBtn(150, y, 'WITHDRAW', 0xFFD700, ()=>this.showWithdrawPanel())); y+=70;
+        c.add(this.createGlossyBtn(150, y, 'HISTORY', 0x00AAFF, ()=>this.showHistoryPanel())); y+=70;
+        c.add(this.createGlossyBtn(150, y, 'RULES', 0xFFFFFF, ()=>this.showRulesPanel())); y+=70;
         
-        this.addMenuButton(150, y, ' Deposit ', '#00FF00', ()=>this.showDepositPanel(), bs); y+=60;
-        this.addMenuButton(150, y, ' Withdraw ', '#FFD700', ()=>this.showWithdrawPanel(), bs); y+=60;
-        this.addMenuButton(150, y, ' History ', '#00AAFF', ()=>this.showHistoryPanel(), bs); y+=60;
-        this.addMenuButton(150, y, ' Rules ', '#FFFFFF', ()=>this.showRulesPanel(), bs); y+=60;
-        this.addMenuButton(150, y, ' Customer Care ', '#0088CC', ()=>alert('Contact Telegram Support'), bs); y+=60;
-
         if(this.isAdmin) {
             c.add(this.add.rectangle(150, y, 200, 2, 0x555555).setOrigin(0.5)); y+=20;
-            c.add(this.add.text(150, y, 'ADMIN', {fontSize:'16px', fill:'#F00'}).setOrigin(0.5)); y+=30;
+            c.add(this.add.text(150, y, 'ADMIN TOOLS', {fontSize:'16px', fill:'#F00'}).setOrigin(0.5)); y+=30;
             
-            // Add Money
-            this.addMenuButton(150, y, ' Add Money ', '#333', () => { 
-                const u = prompt("Username:"); 
-                const a = parseFloat(prompt("Amount:")); 
-                if(u && a) {
-                    fetch('/api/update-balance', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, amount:a}) })
-                    .then(r=>r.json()).then(d=>alert(d.success?"Added":"Failed"));
-                }
-            }, {fontSize:'16px', fill:'#0F0'}); y+=50;
+            c.add(this.createGlossyBtn(150, y, 'ADD MONEY ($)', 0x333333, () => { 
+                const u = prompt("Username:"); const a = parseFloat(prompt("Amount:")); 
+                if(u && a) fetch('/api/update-balance', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, amount:a}) }).then(r=>r.json()).then(d=>alert(d.success?"Added":"Failed"));
+            })); y+=60;
 
-            // User List
-            this.addMenuButton(150, y, ' User List ', '#FFF', ()=>this.showUserListPanel(), {fontSize:'16px', fill:'#000'}); y+=50;
-
-            // Check
-            this.addMenuButton(150, y, ' Check Dep ', '#00AAFF', ()=>{this.showAdminRequestsPanel('Deposit');this.toggleMenu();}, {fontSize:'16px', fill:'#000'}); y+=50;
-            this.addMenuButton(150, y, ' Check Wdr ', '#FF8800', ()=>{this.showAdminRequestsPanel('Withdraw');this.toggleMenu();}, {fontSize:'16px', fill:'#000'}); y+=50;
+            c.add(this.createGlossyBtn(150, y, 'USER LIST', 0x555555, ()=>this.showUserListPanel())); y+=60;
+            c.add(this.createGlossyBtn(150, y, 'CHECK DEPOSIT', 0x00AAFF, ()=>{this.showAdminRequestsPanel('Deposit');this.toggleMenu();})); y+=60;
+            c.add(this.createGlossyBtn(150, y, 'CHECK WITHDRAW', 0xFF8800, ()=>{this.showAdminRequestsPanel('Withdraw');this.toggleMenu();})); y+=60;
             
-            // Win Rate Controls
             const wb = this.add.text(150, y, ` Win: ${this.forceWin?'FORCE':this.currentWinRate+'%'} `, {fontSize:'14px', fill:'#FFF', backgroundColor:'#F00', padding:5}).setOrigin(0.5).setInteractive({useHandCursor:true});
             wb.on('pointerdown', ()=>{ this.toggleWinRate(wb); });
             c.add(wb);
         }
-        this.addMenuButton(150, h-80, ' Logout ', '#F00', ()=>location.reload(), bs);
+        c.add(this.createGlossyBtn(150, h-80, 'LOGOUT', 0xFF0000, ()=>location.reload()));
     }
 
     toggleWinRate(btn) {
@@ -326,12 +353,11 @@ class GameScene extends Phaser.Scene {
         else if(this.currentWinRate===20) this.currentWinRate=30;
         else if(this.currentWinRate===30) this.currentWinRate=60;
         else if(this.currentWinRate===60) { this.forceWin=true; }
-        
         btn.setText(` Win: ${this.forceWin?'FORCE':this.currentWinRate+'%'} `);
         btn.setStyle({ backgroundColor: this.forceWin?'#0A0':(this.currentWinRate>30?'#FFA500':'#F00') });
     }
 
-    // --- USER LIST PANEL ---
+    // --- USER LIST PANEL WITH BAN ---
     showUserListPanel() {
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(300);
@@ -339,7 +365,6 @@ class GameScene extends Phaser.Scene {
         c.add(this.add.text(0, -350, "ALL USERS", { fontSize: '28px', fill: '#FFD700' }).setOrigin(0.5));
         this.addCloseButton(c, ()=>c.destroy(), 350);
 
-        // Search Box Simulation
         c.add(this.add.text(0, -300, "Search by Mobile/Name:", {fontSize:'16px', fill:'#AAA'}).setOrigin(0.5));
         const searchBg = this.add.rectangle(0, -270, 300, 40, 0x333).setInteractive({useHandCursor:true});
         const searchText = this.add.text(0, -270, "Tap to Search", {fontSize:'18px', fill:'#FFF'}).setOrigin(0.5);
@@ -350,54 +375,41 @@ class GameScene extends Phaser.Scene {
 
         const fetchAndShow = (query = '') => {
             fetch('/api/admin/users').then(r=>r.json()).then(users => {
-                const filtered = users.filter(u => u.username.includes(query) || u.mobile.includes(query)).slice(0, 20); // Limit 20
-                let txt = "NAME | MOBILE | PASS | BAL\n---------------------------\n";
+                c.list.forEach(item => { if(item.name === 'banBtn') item.destroy(); }); // Clear old buttons
+                
+                const filtered = users.filter(u => u.username.includes(query) || u.mobile.includes(query)).slice(0, 7); // Show 7
+                let txt = "NAME | MOBILE | BAL | STATUS\n------------------------------\n";
+                let btnY = -180;
+
                 filtered.forEach(u => {
-                    txt += `${u.username} | ${u.mobile}\nPass: ${u.password} | Tk: ${u.balance}\n---------------------------\n`;
+                    const status = u.isBanned ? "BANNED" : "ACTIVE";
+                    txt += `${u.username} | ${u.mobile} | ${u.balance}\nStatus: ${status}\n\n`;
+                    
+                    if(u.username !== 'admin') {
+                        const banBtn = this.add.text(180, btnY, u.isBanned ? " UNBAN " : " BAN ", { fontSize:'14px', fill:'#FFF', backgroundColor: u.isBanned ? '#0A0' : '#F00' })
+                            .setOrigin(0.5).setInteractive({useHandCursor:true}).setName('banBtn');
+                        
+                        banBtn.on('pointerdown', () => {
+                            fetch('/api/admin/ban-user', {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({ username: u.username, banStatus: !u.isBanned })
+                            }).then(() => fetchAndShow(query));
+                        });
+                        c.add(banBtn);
+                    }
+                    btnY += 45; 
                 });
                 userListText.setText(txt);
             });
         };
 
-        searchBg.on('pointerdown', () => {
-            const q = prompt("Search User:");
-            if(q !== null) { searchText.setText(q); fetchAndShow(q); }
-        });
-
-        fetchAndShow(); // Initial load
+        searchBg.on('pointerdown', () => { const q = prompt("Search User:"); if(q !== null) { searchText.setText(q); fetchAndShow(q); } });
+        fetchAndShow();
     }
 
-    // --- OTHER UI HELPERS ---
-    showRulesPanel() {
-        this.showInfoPanel('GAME RULES & POLICY', `
--- REGISTRATION POLICY --
-1. One person can have only ONE account.
-2. Multiple accounts with same number/IP 
-   will be BANNED permanently.
-
--- TRANSACTION RULES --
-1. Deposit: Min 50 Tk, Max 5000 Tk.
-2. Withdraw: Min 100 Tk, Max 50,000 Tk.
-3. Always send money to the ACTIVE number.
-4. Input Uppercase TRX ID correctly.
-5. Wrong TrxID = No Money.
-
--- WINNING --
-1. 3+ Symbols = Win.
-2. Consecutive wins increase multiplier (x1-x5).
-3. System malfunction voids all pays.
-`);
-    }
-
-    addMenuButton(x, y, t, c, cb, st) {
-        const s = st || { fontSize: '20px', fill: '#000', padding: { x: 10, y: 8 } };
-        const b = this.add.text(x, y, t, { fontSize: s.fontSize, fill: s.fill, backgroundColor: c, padding: s.padding }).setOrigin(0.5).setInteractive({useHandCursor:true});
-        b.on('pointerdown', ()=>{ if(!t.includes('Win')) this.toggleMenu(); this.time.delayedCall(200, cb, [], this); });
-        this.menuBar.add(b);
-    }
-
-    // --- HISTORY, PAYMENTS, ADMIN REQ ---
-    showHistoryPanel() { /* Same as before */ 
+    showRulesPanel() { this.showInfoPanel('GAME RULES & POLICY', `\n-- REGISTRATION POLICY --\n1. One person can have only ONE account.\n2. Multiple accounts with same number/IP will be BANNED permanently.\n\n-- TRANSACTION RULES --\n1. Deposit: Min 50 Tk, Max 5000 Tk.\n2. Withdraw: Min 100 Tk, Max 50,000 Tk.\n3. Always send money to the ACTIVE number.\n4. Input Uppercase TRX ID correctly.\n\n-- WINNING --\n1. 3+ Symbols = Win.\n2. Consecutive wins increase multiplier (x1-x5).`); }
+    
+    showHistoryPanel() { 
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(300);
         c.add(this.add.rectangle(0, 0, 450, 600, 0x111111, 0.95).setOrigin(0.5));
@@ -405,18 +417,11 @@ class GameScene extends Phaser.Scene {
         this.addCloseButton(c, ()=>c.destroy(), 250);
         fetch(`/api/history?username=${this.currentUser.username}`).then(r=>r.json()).then(d=>{
             if(d.length===0) c.add(this.add.text(0,0,"No History",{fontSize:'18px',fill:'#555'}).setOrigin(0.5));
-            else {
-                let y=-200;
-                d.slice(0,7).forEach(i=>{
-                    const col=i.type==='Deposit'?'#0F0':'#F80';
-                    c.add(this.add.text(-200,y,`${i.type}: Tk ${i.amount}\nStatus: ${i.status}`,{fontSize:'16px',fill:col}));
-                    c.add(this.add.rectangle(0,y+40,400,1,0x333)); y+=55;
-                });
-            }
+            else { let y=-200; d.slice(0,7).forEach(i=>{ const col=i.type==='Deposit'?'#0F0':'#F80'; c.add(this.add.text(-200,y,`${i.type}: Tk ${i.amount}\nStatus: ${i.status}`,{fontSize:'16px',fill:col})); c.add(this.add.rectangle(0,y+40,400,1,0x333)); y+=55; }); }
         });
     }
 
-    showTrxVerificationPanel() { /* Same but with Uppercase TRX */ 
+    showTrxVerificationPanel() { 
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(200);
         c.add(this.add.rectangle(0,0,width,height,0x000000,0.7)); c.add(this.add.rectangle(0,0,450,650,0xFFFFFF));
@@ -428,24 +433,19 @@ class GameScene extends Phaser.Scene {
         c.add(this.add.text(-60,-80,num,{fontSize:'28px',fill:color,fontStyle:'bold'}).setOrigin(0.5));
         const cpy = this.add.text(120,-80," COPY ",{fontSize:'16px',fill:'#FFF',backgroundColor:'#333'}).setOrigin(0.5).setInteractive({useHandCursor:true});
         cpy.on('pointerdown',()=>{navigator.clipboard.writeText(num);cpy.setText("COPIED!");this.time.delayedCall(1000,()=>cpy.setText(" COPY "));}); c.add(cpy);
-        
         c.add(this.add.text(0,20,"Enter Transaction ID:",{fontSize:'18px',fill:'#555'}).setOrigin(0.5));
         const inp = this.add.text(0,60,"Tap to Enter TRX",{fontSize:'20px',fill:'#888',backgroundColor:'#EEE',padding:10}).setOrigin(0.5).setInteractive({useHandCursor:true});
-        inp.on('pointerdown',()=>{const v=prompt("Enter TRX ID:");if(v){
-            const upperV = v.toUpperCase(); // FORCE UPPERCASE
-            inp.setText(upperV);inp.setFill('#000');this.depositData.trx=upperV;
-        }}); c.add(inp);
-        
+        inp.on('pointerdown',()=>{const v=prompt("Enter TRX ID:");if(v){ const upperV = v.toUpperCase(); inp.setText(upperV);inp.setFill('#000');this.depositData.trx=upperV; }}); c.add(inp);
         const sub = this.add.text(0,160,' VERIFY ',{fontSize:'24px',fill:'#FFF',backgroundColor:'#0A0',padding:15}).setOrigin(0.5).setInteractive({useHandCursor:true});
         sub.on('pointerdown',()=>{if(this.depositData.trx){fetch('/api/transaction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'Deposit',...this.depositData,username:this.currentUser.username})}).then(r=>r.json()).then(d=>alert(d.message));c.destroy();this.setUIInteractive(true);}else alert("Enter TRX!")}); c.add(sub);
         this.addCloseButton(c,()=>{c.destroy();this.setUIInteractive(true);},260);
     }
 
-    initDeposit(method) { /* Same */ const amount = parseFloat(prompt(`Amount (Min ${MIN_DEPOSIT}):`)); if (isNaN(amount) || amount < MIN_DEPOSIT) return alert('Invalid Amount'); const phone = prompt('Wallet Number (11 Digit):'); if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number'); this.depositData = { method, amount, phone, trx: null }; if (this.depositPanel) this.depositPanel.destroy(); this.depositPanel = null; this.showTrxVerificationPanel(); }
-    initWithdraw(method) { /* Same */ const amount = parseFloat(prompt(`Amount (Min ${MIN_WITHDRAW}):`)); if (isNaN(amount) || amount < MIN_WITHDRAW || amount > this.balance) return alert('Invalid Amount'); const phone = prompt('Wallet Number (11 Digit):'); if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number'); fetch('/api/transaction', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'Withdraw', method, amount, phone, trx:'N/A', username:this.currentUser.username}) }).then(r=>r.json()).then(d=>{ alert(d.message); if(d.success){ this.balance=d.newBalance; this.updateUI(); } }); if(this.withdrawPanel)this.withdrawPanel.destroy(); this.setUIInteractive(true); }
+    initDeposit(method) { const amount = parseFloat(prompt(`Amount (Min ${MIN_DEPOSIT}):`)); if (isNaN(amount) || amount < MIN_DEPOSIT) return alert('Invalid Amount'); const phone = prompt('Wallet Number (11 Digit):'); if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number'); this.depositData = { method, amount, phone, trx: null }; if (this.depositPanel) this.depositPanel.destroy(); this.depositPanel = null; this.showTrxVerificationPanel(); }
+    initWithdraw(method) { const amount = parseFloat(prompt(`Amount (Min ${MIN_WITHDRAW}):`)); if (isNaN(amount) || amount < MIN_WITHDRAW || amount > this.balance) return alert('Invalid Amount'); const phone = prompt('Wallet Number (11 Digit):'); if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number'); fetch('/api/transaction', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'Withdraw', method, amount, phone, trx:'N/A', username:this.currentUser.username}) }).then(r=>r.json()).then(d=>{ alert(d.message); if(d.success){ this.balance=d.newBalance; this.updateUI(); } }); if(this.withdrawPanel)this.withdrawPanel.destroy(); this.setUIInteractive(true); }
     
     showAdminRequestsPanel(type) { if(this.adminPanelContainer)return; fetch('/api/admin/transactions').then(r=>r.json()).then(d=>{ this.createAdminUI(d.filter(t=>t.status==='Pending'&&t.type===type), type); }); }
-    createAdminUI(list, type) { /* Same */ const {width,height}=this.scale; const c=this.add.container(width/2,height/2).setDepth(300); this.adminPanelContainer=c; c.add(this.add.rectangle(0,0,500,700,0x222222).setStrokeStyle(2,0xFFD700)); c.add(this.add.text(0,-320,`PENDING ${type}`,{fontSize:'28px',fill:'#FFD700'}).setOrigin(0.5)); this.addCloseButton(c,()=>{c.destroy();this.adminPanelContainer=null;},320); if(list.length===0) c.add(this.add.text(0,0,"No Requests",{fontSize:'20px',fill:'#AAA'}).setOrigin(0.5)); let y=-250; list.slice(0,5).forEach(r=>{ c.add(this.add.text(-210,y,`${r.username}: Tk ${r.amount}\n${r.phone} (${r.trx})`,{fontSize:'16px',fill:'#FFF'})); const ok=this.add.text(100,y," [✔] ",{fontSize:'24px',fill:'#0F0'}).setOrigin(0.5).setInteractive({useHandCursor:true}); ok.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'approve',r)); c.add(ok); const no=this.add.text(160,y," [X] ",{fontSize:'24px',fill:'#F00'}).setOrigin(0.5).setInteractive({useHandCursor:true}); no.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'reject',r)); c.add(no); y+=80; }); }
+    createAdminUI(list, type) { const {width,height}=this.scale; const c=this.add.container(width/2,height/2).setDepth(300); this.adminPanelContainer=c; c.add(this.add.rectangle(0,0,500,700,0x222222).setStrokeStyle(2,0xFFD700)); c.add(this.add.text(0,-320,`PENDING ${type}`,{fontSize:'28px',fill:'#FFD700'}).setOrigin(0.5)); this.addCloseButton(c,()=>{c.destroy();this.adminPanelContainer=null;},320); if(list.length===0) c.add(this.add.text(0,0,"No Requests",{fontSize:'20px',fill:'#AAA'}).setOrigin(0.5)); let y=-250; list.slice(0,5).forEach(r=>{ c.add(this.add.text(-210,y,`${r.username}: Tk ${r.amount}\n${r.phone} (${r.trx})`,{fontSize:'16px',fill:'#FFF'})); const ok=this.add.text(100,y," [✔] ",{fontSize:'24px',fill:'#0F0'}).setOrigin(0.5).setInteractive({useHandCursor:true}); ok.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'approve',r)); c.add(ok); const no=this.add.text(160,y," [X] ",{fontSize:'24px',fill:'#F00'}).setOrigin(0.5).setInteractive({useHandCursor:true}); no.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'reject',r)); c.add(no); y+=80; }); }
     handleAdminAction(trxId, action, req) { fetch('/api/admin/action', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ trxId, action, type: req.type, amount: req.amount, username: req.username }) }).then(() => { alert("Done"); this.adminPanelContainer.destroy(); this.adminPanelContainer = null; this.showAdminRequestsPanel(req.type); }); }
     
     updateUI() { if(this.balanceText)this.balanceText.setText(`Balance: Tk ${this.balance.toFixed(2)}`); if(this.menuBalanceText)this.menuBalanceText.setText(`Tk ${this.balance.toFixed(2)}`); }
