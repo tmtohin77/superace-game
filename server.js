@@ -2,104 +2,196 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ============================================================
+// ⚠️ আপনার MongoDB লিংকটি নিচে পেস্ট করুন (পাসওয়ার্ড সহ)
+// ============================================================
+const MONGO_URI = "mongodb+srv://tmtohin177:superace123@cluster0.nsyah8t.mongodb.net/?appName=Cluster0"; 
+// উদাহরণ: "mongodb+srv://admin:superace123@cluster0.abcd.mongodb.net/?retryWrites=true&w=majority"
+
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- SERVER DATABASE (Mock) ---
-let users = [
-    { username: 'testuser', password: 'password123', mobile: '01111111111', balance: 0.00 },
-    { username: 'admin', password: 'admin', mobile: '01000000000', balance: 999999999.00 }
-];
-let transactions = [];
+// Connect to MongoDB
+mongoose.connect(MONGO_URI)
+    .then(() => console.log("✅ MongoDB Connected Successfully!"))
+    .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
-// --- APIs ---
-app.post('/api/login', (req, res) => {
+// --- DATABASE SCHEMAS & MODELS ---
+
+// 1. User Schema
+const UserSchema = new mongoose.Schema({
+    username: { type: String, required: true },
+    password: { type: String, required: true },
+    mobile: { type: String, required: true },
+    balance: { type: Number, default: 0.00 },
+    isAdmin: { type: Boolean, default: false }
+});
+const User = mongoose.model('User', UserSchema);
+
+// 2. Transaction Schema
+const TransactionSchema = new mongoose.Schema({
+    type: String, // Deposit or Withdraw
+    amount: Number,
+    method: String,
+    phone: String,
+    trx: String,
+    username: String,
+    status: { type: String, default: 'Pending' },
+    date: { type: String, default: () => new Date().toLocaleString() }
+});
+const Transaction = mongoose.model('Transaction', TransactionSchema);
+
+// --- API ROUTES ---
+
+// 1. Login
+app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    const user = users.find(u => (u.username === username || u.mobile === username) && u.password === password);
-    if (user) {
-        const { password, ...userInfo } = user; 
-        res.json({ success: true, user: userInfo });
-    } else {
-        res.json({ success: false, message: 'Invalid Credentials' });
-    }
-});
-
-app.post('/api/register', (req, res) => {
-    const { mobile, username, password } = req.body;
-    const exists = users.some(u => u.mobile === mobile || u.username === username);
-    if (exists) return res.json({ success: false, message: 'User already exists!' });
-    users.push({ username, password, mobile, balance: 0.00 });
-    res.json({ success: true, message: 'Registration Successful!' });
-});
-
-app.post('/api/transaction', (req, res) => {
-    const trxData = req.body; 
-    // Add Date
-    const newTrx = { ...trxData, status: 'Pending', date: new Date().toLocaleString() };
-    transactions.push(newTrx);
-    
-    if (trxData.type === 'Withdraw') {
-        const user = users.find(u => u.username === trxData.username);
-        if (user && user.balance >= trxData.amount) {
-            user.balance -= trxData.amount;
-            res.json({ success: true, message: 'Request Submitted' });
+    try {
+        const user = await User.findOne({ 
+            $or: [{ username: username }, { mobile: username }],
+            password: password 
+        });
+        
+        if (user) {
+            // Check if admin (Hardcoded security for first admin)
+            const userData = user.toObject();
+            if(user.username === 'admin') userData.isAdmin = true;
+            
+            res.json({ success: true, user: userData });
         } else {
-            res.json({ success: false, message: 'Insufficient Balance' });
+            res.json({ success: false, message: 'Invalid Credentials' });
         }
-    } else {
-        res.json({ success: true, message: 'Request Submitted' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Server Error' });
     }
 });
 
-// NEW API: Get User History
-app.get('/api/history', (req, res) => {
+// 2. Register
+app.post('/api/register', async (req, res) => {
+    const { mobile, username, password } = req.body;
+    try {
+        const exists = await User.findOne({ $or: [{ mobile }, { username }] });
+        if (exists) return res.json({ success: false, message: 'User or Mobile already exists!' });
+
+        const newUser = new User({ username, password, mobile, balance: 0.00 });
+        await newUser.save();
+        res.json({ success: true, message: 'Registration Successful!' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Error registering user' });
+    }
+});
+
+// 3. Transaction Request
+app.post('/api/transaction', async (req, res) => {
+    const trxData = req.body; 
+    try {
+        const newTrx = new Transaction(trxData);
+        await newTrx.save();
+
+        // Withdraw হলে সাথে সাথে ব্যালেন্স কেটে রাখা হবে
+        if (trxData.type === 'Withdraw') {
+            const user = await User.findOne({ username: trxData.username });
+            if (user && user.balance >= trxData.amount) {
+                user.balance -= trxData.amount;
+                await user.save();
+                res.json({ success: true, message: 'Withdraw Request Submitted', newBalance: user.balance });
+            } else {
+                // ব্যালেন্স না থাকলে ট্রানজেকশন ডিলিট বা ফেইল করা উচিত, আপাতত এরর দিচ্ছি
+                await Transaction.findByIdAndDelete(newTrx._id);
+                res.json({ success: false, message: 'Insufficient Balance' });
+            }
+        } else {
+            res.json({ success: true, message: 'Deposit Request Submitted' });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Transaction Failed' });
+    }
+});
+
+// 4. Update Balance (Win/Loss/Admin Add)
+app.post('/api/update-balance', async (req, res) => {
+    const { username, amount } = req.body;
+    try {
+        const user = await User.findOne({ username });
+        if (user) {
+            user.balance += amount;
+            user.balance = parseFloat(user.balance.toFixed(2));
+            await user.save();
+            res.json({ success: true, newBalance: user.balance });
+        } else {
+            res.json({ success: false });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false });
+    }
+});
+
+// 5. Get History
+app.get('/api/history', async (req, res) => {
     const { username } = req.query;
     if (!username) return res.json([]);
-    // Filter transactions for specific user
-    const userHistory = transactions.filter(t => t.username === username);
-    res.json(userHistory.reverse()); // Show latest first
-});
-
-app.post('/api/update-balance', (req, res) => {
-    const { username, amount } = req.body;
-    const user = users.find(u => u.username === username);
-    if (user) {
-        user.balance += amount;
-        user.balance = parseFloat(user.balance.toFixed(2));
-        res.json({ success: true, newBalance: user.balance });
-    } else {
-        res.json({ success: false });
+    try {
+        const history = await Transaction.find({ username }).sort({ _id: -1 }).limit(20);
+        res.json(history);
+    } catch (err) {
+        res.json([]);
     }
 });
 
-app.get('/api/admin/transactions', (req, res) => res.json(transactions));
-
-app.post('/api/admin/action', (req, res) => {
-    const { trxId, action, type, amount, username } = req.body;
-    const trx = transactions.find(t => t.trx == trxId || t.phone == trxId); 
-
-    if (trx) {
-        trx.status = action === 'approve' ? 'Success' : 'Failed';
-
-        if (action === 'approve' && type === 'Deposit') {
-            const user = users.find(u => u.username === username);
-            if (user) user.balance += amount;
-        }
-        if (action === 'reject' && type === 'Withdraw') {
-            const user = users.find(u => u.username === username);
-            if (user) user.balance += amount;
-        }
-        res.json({ success: true });
-    } else {
-        res.json({ success: false, message: 'Transaction not found' });
+// 6. Admin: Get All Transactions
+app.get('/api/admin/transactions', async (req, res) => {
+    try {
+        const transactions = await Transaction.find().sort({ _id: -1 }).limit(50);
+        res.json(transactions);
+    } catch (err) {
+        res.json([]);
     }
 });
 
+// 7. Admin Action
+app.post('/api/admin/action', async (req, res) => {
+    const { trxId, action, type, amount, username } = req.body; // trxId here is actually the 'trx' string or phone
+    
+    try {
+        // Find by TRX ID or Phone (since we stored trx string, not _id in frontend logic for simplicity)
+        const trx = await Transaction.findOne({ 
+            $or: [{ trx: trxId }, { phone: trxId }], 
+            status: 'Pending' 
+        });
+
+        if (trx) {
+            trx.status = action === 'approve' ? 'Success' : 'Failed';
+            await trx.save();
+
+            const user = await User.findOne({ username });
+            
+            if (user) {
+                if (action === 'approve' && type === 'Deposit') {
+                    user.balance += amount;
+                }
+                if (action === 'reject' && type === 'Withdraw') {
+                    user.balance += amount; // Refund
+                }
+                user.balance = parseFloat(user.balance.toFixed(2));
+                await user.save();
+            }
+            res.json({ success: true });
+        } else {
+            res.json({ success: false, message: 'Transaction not found or already processed' });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Error processing action' });
+    }
+});
+
+// Serve Game
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
