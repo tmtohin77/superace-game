@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ⚠️ আপনার MongoDB লিংকটি নিচে ঠিক আছে কি না দেখে নিন
-const MONGO_URI = "mongodb+srv://admin:superace123@cluster0.abcd.mongodb.net/?retryWrites=true&w=majority"; 
+const MONGO_URI = "mongodb+srv://tmtohin177:superace123@cluster0.nsyah8t.mongodb.net/?appName=Cluster0"; 
 
 app.use(cors());
 app.use(bodyParser.json());
