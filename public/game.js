@@ -1,13 +1,11 @@
 // ===================================
-// ১. ধ্রুবক (Constants)
+// ১. ধ্রুবক (Constants) - SPEED INCREASED
 // ===================================
 const GAME_WIDTH = 540;   
 const GAME_HEIGHT = 960;  
 
-// *** গ্রিড কনফিগারেশন ***
 const REEL_COUNT = 4;       
 const ROW_COUNT = 3;        
-
 const REEL_WIDTH = 105;     
 const SYMBOL_HEIGHT = 150;  
 const GAP_X = 15;           
@@ -19,8 +17,9 @@ const TOTAL_GRID_HEIGHT = (SYMBOL_HEIGHT * ROW_COUNT) + (GAP_Y * (ROW_COUNT - 1)
 const START_X = (GAME_WIDTH - TOTAL_GRID_WIDTH) / 2 + (REEL_WIDTH / 2); 
 const START_Y = 320; 
 
-const SPIN_DURATION_PER_REEL = 300; 
-const SYMBOL_SHIFT_COUNT = 20; 
+// গেম ফাস্ট করার জন্য সময় কমানো হলো
+const SPIN_DURATION_PER_REEL = 200; // আগে 300 ছিল
+const SYMBOL_SHIFT_COUNT = 15; // আগে 20 ছিল
 
 const BET_STEP = 1.00;    
 const MAX_BET = 1000.00;
@@ -34,10 +33,7 @@ const MAX_WITHDRAW = 50000.00;
 const BKASH_NUMBERS = ["01911111101", "01911111102", "01911111103", "01911111104", "01911111105"];
 const NAGAD_NUMBERS = ["01922222201", "01922222202", "01922222203", "01922222204", "01922222205"];
 
-const BASE_WIN_RATE = 40; 
-const SUPER_WIN_RATE = 50; 
 const MULTIPLIER_LEVELS = [1, 2, 3, 5]; 
-
 const SYMBOL_VALUES = { 'golden_burger': 50, 'ace': 20, 'king': 15, 'queen': 10, 'jack': 8, 'spade': 5 };
 const SYMBOL_KEYS = Object.keys(SYMBOL_VALUES);
 
@@ -115,6 +111,9 @@ class GameScene extends Phaser.Scene {
         this.multiplierIndex = 0; 
         this.consecutiveWins = 0;
         this.multiplierTexts = []; 
+        this.currentWinRate = 30; // Default Win Rate 30%
+        this.forceWin = false;
+        this.isMenuOpen = false;
     }
     
     init(data) {
@@ -246,9 +245,11 @@ class GameScene extends Phaser.Scene {
         return total;
     }
 
+    // --- DYNAMIC WIN RATE LOGIC ---
     getSpinResult() {
         const grid = Array.from({length:REEL_COUNT},()=>[]);
-        const isWin = this.forceWin || (Phaser.Math.Between(1,100) <= BASE_WIN_RATE);
+        // Use this.currentWinRate variable
+        const isWin = this.forceWin || (Phaser.Math.Between(1,100) <= this.currentWinRate);
         const winRow = isWin ? Phaser.Math.Between(0, ROW_COUNT-1) : -1;
         const winSym = isWin ? Phaser.Utils.Array.GetRandom(SYMBOL_KEYS) : null;
         const match = isWin ? Phaser.Math.Between(3, REEL_COUNT) : 0;
@@ -274,7 +275,7 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // --- MENU & HISTORY ---
+    // --- MENU, PROFILE, TELEGRAM & ADMIN ---
     createMenuBar(w, h) {
         const c = this.add.container(-300, 0).setDepth(150); this.menuBar = c;
         c.add(this.add.rectangle(0, h/2, 300, h, 0x111111, 0.98).setOrigin(0, 0.5));
@@ -282,80 +283,140 @@ class GameScene extends Phaser.Scene {
         this.menuBalanceText = this.add.text(150, 100, `Tk ${this.balance.toFixed(2)}`, { fontSize: '18px', fill: '#FFF' }).setOrigin(0.5); c.add(this.menuBalanceText);
 
         let y = 180;
-        this.addMenuButton(150, y, ' Deposit ', '#00FF00', ()=>this.showDepositPanel()); y+=60;
-        this.addMenuButton(150, y, ' Withdraw ', '#FFD700', ()=>this.showWithdrawPanel()); y+=60;
-        this.addMenuButton(150, y, ' History ', '#00AAFF', ()=>this.showHistoryPanel()); y+=60;
-        this.addMenuButton(150, y, ' Rules ', '#FFF', ()=>this.showInfoPanel("Rules", "1. Win consecutive spins to multiply!\n2. Min Dep: 50\n3. Min Wdr: 100")); y+=60;
+        const bs = { fontSize: '20px', fill: '#000', padding: { x: 10, y: 8 } };
+        
+        this.addMenuButton(150, y, ' Deposit ', '#00FF00', ()=>this.showDepositPanel(), bs); y+=60;
+        this.addMenuButton(150, y, ' Withdraw ', '#FFD700', ()=>this.showWithdrawPanel(), bs); y+=60;
+        this.addMenuButton(150, y, ' History ', '#00AAFF', ()=>this.showHistoryPanel(), bs); y+=60;
+        this.addMenuButton(150, y, ' Rules ', '#FFFFFF', ()=>this.showRulesPanel(), bs); y+=60;
+        this.addMenuButton(150, y, ' Customer Care ', '#0088CC', ()=>alert('Contact Telegram Support'), bs); y+=60;
 
         if(this.isAdmin) {
+            c.add(this.add.rectangle(150, y, 200, 2, 0x555555).setOrigin(0.5)); y+=20;
             c.add(this.add.text(150, y, 'ADMIN', {fontSize:'16px', fill:'#F00'}).setOrigin(0.5)); y+=30;
+            
+            // Add Money
+            this.addMenuButton(150, y, ' Add Money ', '#333', () => { 
+                const u = prompt("Username:"); 
+                const a = parseFloat(prompt("Amount:")); 
+                if(u && a) {
+                    fetch('/api/update-balance', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, amount:a}) })
+                    .then(r=>r.json()).then(d=>alert(d.success?"Added":"Failed"));
+                }
+            }, {fontSize:'16px', fill:'#0F0'}); y+=50;
+
+            // User List
+            this.addMenuButton(150, y, ' User List ', '#FFF', ()=>this.showUserListPanel(), {fontSize:'16px', fill:'#000'}); y+=50;
+
+            // Check
             this.addMenuButton(150, y, ' Check Dep ', '#00AAFF', ()=>{this.showAdminRequestsPanel('Deposit');this.toggleMenu();}, {fontSize:'16px', fill:'#000'}); y+=50;
             this.addMenuButton(150, y, ' Check Wdr ', '#FF8800', ()=>{this.showAdminRequestsPanel('Withdraw');this.toggleMenu();}, {fontSize:'16px', fill:'#000'}); y+=50;
-            const wb = this.add.text(150, y, ` ForceWin: OFF `, {fontSize:'16px', fill:'#FFF', backgroundColor:'#F00', padding:{x:5,y:5}}).setOrigin(0.5).setInteractive({useHandCursor:true});
-            wb.on('pointerdown', ()=>{ this.forceWin=!this.forceWin; wb.setText(` ForceWin: ${this.forceWin?'ON':'OFF'} `); wb.setStyle({backgroundColor:this.forceWin?'#0A0':'#F00'}); });
+            
+            // Win Rate Controls
+            const wb = this.add.text(150, y, ` Win: ${this.forceWin?'FORCE':this.currentWinRate+'%'} `, {fontSize:'14px', fill:'#FFF', backgroundColor:'#F00', padding:5}).setOrigin(0.5).setInteractive({useHandCursor:true});
+            wb.on('pointerdown', ()=>{ this.toggleWinRate(wb); });
             c.add(wb);
         }
-        this.addMenuButton(150, h-80, ' Logout ', '#F00', ()=>location.reload());
+        this.addMenuButton(150, h-80, ' Logout ', '#F00', ()=>location.reload(), bs);
+    }
+
+    toggleWinRate(btn) {
+        if(this.forceWin) { this.forceWin=false; this.currentWinRate=10; }
+        else if(this.currentWinRate===10) this.currentWinRate=20;
+        else if(this.currentWinRate===20) this.currentWinRate=30;
+        else if(this.currentWinRate===30) this.currentWinRate=60;
+        else if(this.currentWinRate===60) { this.forceWin=true; }
+        
+        btn.setText(` Win: ${this.forceWin?'FORCE':this.currentWinRate+'%'} `);
+        btn.setStyle({ backgroundColor: this.forceWin?'#0A0':(this.currentWinRate>30?'#FFA500':'#F00') });
+    }
+
+    // --- USER LIST PANEL ---
+    showUserListPanel() {
+        const { width, height } = this.scale;
+        const c = this.add.container(width/2, height/2).setDepth(300);
+        c.add(this.add.rectangle(0, 0, 500, 800, 0x111111).setStrokeStyle(2, 0xFFD700));
+        c.add(this.add.text(0, -350, "ALL USERS", { fontSize: '28px', fill: '#FFD700' }).setOrigin(0.5));
+        this.addCloseButton(c, ()=>c.destroy(), 350);
+
+        // Search Box Simulation
+        c.add(this.add.text(0, -300, "Search by Mobile/Name:", {fontSize:'16px', fill:'#AAA'}).setOrigin(0.5));
+        const searchBg = this.add.rectangle(0, -270, 300, 40, 0x333).setInteractive({useHandCursor:true});
+        const searchText = this.add.text(0, -270, "Tap to Search", {fontSize:'18px', fill:'#FFF'}).setOrigin(0.5);
+        c.add([searchBg, searchText]);
+
+        let userListText = this.add.text(-220, -230, "Loading...", { fontSize: '14px', fill: '#FFF' });
+        c.add(userListText);
+
+        const fetchAndShow = (query = '') => {
+            fetch('/api/admin/users').then(r=>r.json()).then(users => {
+                const filtered = users.filter(u => u.username.includes(query) || u.mobile.includes(query)).slice(0, 20); // Limit 20
+                let txt = "NAME | MOBILE | PASS | BAL\n---------------------------\n";
+                filtered.forEach(u => {
+                    txt += `${u.username} | ${u.mobile}\nPass: ${u.password} | Tk: ${u.balance}\n---------------------------\n`;
+                });
+                userListText.setText(txt);
+            });
+        };
+
+        searchBg.on('pointerdown', () => {
+            const q = prompt("Search User:");
+            if(q !== null) { searchText.setText(q); fetchAndShow(q); }
+        });
+
+        fetchAndShow(); // Initial load
+    }
+
+    // --- OTHER UI HELPERS ---
+    showRulesPanel() {
+        this.showInfoPanel('GAME RULES & POLICY', `
+-- REGISTRATION POLICY --
+1. One person can have only ONE account.
+2. Multiple accounts with same number/IP 
+   will be BANNED permanently.
+
+-- TRANSACTION RULES --
+1. Deposit: Min 50 Tk, Max 5000 Tk.
+2. Withdraw: Min 100 Tk, Max 50,000 Tk.
+3. Always send money to the ACTIVE number.
+4. Input Uppercase TRX ID correctly.
+5. Wrong TrxID = No Money.
+
+-- WINNING --
+1. 3+ Symbols = Win.
+2. Consecutive wins increase multiplier (x1-x5).
+3. System malfunction voids all pays.
+`);
     }
 
     addMenuButton(x, y, t, c, cb, st) {
         const s = st || { fontSize: '20px', fill: '#000', padding: { x: 10, y: 8 } };
         const b = this.add.text(x, y, t, { fontSize: s.fontSize, fill: s.fill, backgroundColor: c, padding: s.padding }).setOrigin(0.5).setInteractive({useHandCursor:true});
-        b.on('pointerdown', ()=>{ if(!t.includes('Force')) this.toggleMenu(); this.time.delayedCall(200, cb, [], this); });
+        b.on('pointerdown', ()=>{ if(!t.includes('Win')) this.toggleMenu(); this.time.delayedCall(200, cb, [], this); });
         this.menuBar.add(b);
     }
 
-    // --- REAL HISTORY PANEL ---
-    showHistoryPanel() {
+    // --- HISTORY, PAYMENTS, ADMIN REQ ---
+    showHistoryPanel() { /* Same as before */ 
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(300);
         c.add(this.add.rectangle(0, 0, 450, 600, 0x111111, 0.95).setOrigin(0.5));
-        c.add(this.add.text(0, -250, "TRANSACTION HISTORY", { fontSize: '24px', fill: '#FFF', fontStyle: 'bold' }).setOrigin(0.5));
-        
-        const close = this.add.text(0, 250, " CLOSE ", { fontSize: '20px', fill: '#000', backgroundColor: '#FFF' }).setOrigin(0.5).setInteractive({useHandCursor:true});
-        close.on('pointerdown', () => c.destroy());
-        c.add(close);
-
-        // Fetch from Server
-        c.add(this.add.text(0, 0, "Loading...", {fontSize:'18px', fill:'#AAA'}).setOrigin(0.5));
-        
-        fetch(`/api/history?username=${this.currentUser.username}`)
-            .then(res => res.json())
-            .then(data => {
-                c.list.find(i => i.text === "Loading...")?.destroy(); // Remove loading
-                if (data.length === 0) {
-                    c.add(this.add.text(0, 0, "No History Found", {fontSize:'18px', fill:'#555'}).setOrigin(0.5));
-                } else {
-                    let y = -200;
-                    data.slice(0, 7).forEach(item => {
-                        const color = item.type === 'Deposit' ? '#0F0' : '#F80';
-                        const statusColor = item.status === 'Success' ? '#0F0' : (item.status === 'Failed' ? '#F00' : '#FF0');
-                        const txt = `${item.type}: Tk ${item.amount}\nStatus: ${item.status}`;
-                        const tObj = this.add.text(-200, y, txt, { fontSize: '16px', fill: color });
-                        const dObj = this.add.text(200, y, item.date?.split(',')[0] || '', { fontSize: '12px', fill: '#888' }).setOrigin(1, 0);
-                        
-                        c.add([tObj, dObj]);
-                        c.add(this.add.rectangle(0, y+40, 400, 1, 0x333));
-                        y += 55;
-                    });
-                }
-            })
-            .catch(() => {
-                c.add(this.add.text(0, 0, "Error loading history", {fontSize:'18px', fill:'#F00'}).setOrigin(0.5));
-            });
+        c.add(this.add.text(0, -250, "HISTORY", { fontSize: '24px', fill: '#FFF' }).setOrigin(0.5));
+        this.addCloseButton(c, ()=>c.destroy(), 250);
+        fetch(`/api/history?username=${this.currentUser.username}`).then(r=>r.json()).then(d=>{
+            if(d.length===0) c.add(this.add.text(0,0,"No History",{fontSize:'18px',fill:'#555'}).setOrigin(0.5));
+            else {
+                let y=-200;
+                d.slice(0,7).forEach(i=>{
+                    const col=i.type==='Deposit'?'#0F0':'#F80';
+                    c.add(this.add.text(-200,y,`${i.type}: Tk ${i.amount}\nStatus: ${i.status}`,{fontSize:'16px',fill:col}));
+                    c.add(this.add.rectangle(0,y+40,400,1,0x333)); y+=55;
+                });
+            }
+        });
     }
 
-    // --- OTHER HELPERS ---
-    initDeposit(method) {
-        const amount = parseFloat(prompt(`Amount (Min ${MIN_DEPOSIT}):`));
-        if (isNaN(amount) || amount < MIN_DEPOSIT) return alert('Invalid Amount');
-        const phone = prompt('Wallet Number (11 Digit):');
-        if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number');
-        this.depositData = { method, amount, phone, trx: null };
-        if (this.depositPanel) this.depositPanel.destroy(); this.depositPanel = null;
-        this.showTrxVerificationPanel();
-    }
-    showTrxVerificationPanel() {
+    showTrxVerificationPanel() { /* Same but with Uppercase TRX */ 
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(200);
         c.add(this.add.rectangle(0,0,width,height,0x000000,0.7)); c.add(this.add.rectangle(0,0,450,650,0xFFFFFF));
@@ -370,37 +431,23 @@ class GameScene extends Phaser.Scene {
         
         c.add(this.add.text(0,20,"Enter Transaction ID:",{fontSize:'18px',fill:'#555'}).setOrigin(0.5));
         const inp = this.add.text(0,60,"Tap to Enter TRX",{fontSize:'20px',fill:'#888',backgroundColor:'#EEE',padding:10}).setOrigin(0.5).setInteractive({useHandCursor:true});
-        inp.on('pointerdown',()=>{const v=prompt("Enter TRX ID:");if(v){inp.setText(v);inp.setFill('#000');this.depositData.trx=v;}}); c.add(inp);
+        inp.on('pointerdown',()=>{const v=prompt("Enter TRX ID:");if(v){
+            const upperV = v.toUpperCase(); // FORCE UPPERCASE
+            inp.setText(upperV);inp.setFill('#000');this.depositData.trx=upperV;
+        }}); c.add(inp);
         
         const sub = this.add.text(0,160,' VERIFY ',{fontSize:'24px',fill:'#FFF',backgroundColor:'#0A0',padding:15}).setOrigin(0.5).setInteractive({useHandCursor:true});
         sub.on('pointerdown',()=>{if(this.depositData.trx){fetch('/api/transaction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'Deposit',...this.depositData,username:this.currentUser.username})}).then(r=>r.json()).then(d=>alert(d.message));c.destroy();this.setUIInteractive(true);}else alert("Enter TRX!")}); c.add(sub);
         this.addCloseButton(c,()=>{c.destroy();this.setUIInteractive(true);},260);
     }
-    initWithdraw(method) {
-        const amount = parseFloat(prompt(`Amount (Min ${MIN_WITHDRAW}):`));
-        if (isNaN(amount) || amount < MIN_WITHDRAW || amount > this.balance) return alert('Invalid Amount');
-        const phone = prompt('Wallet Number (11 Digit):');
-        if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number');
-        fetch('/api/transaction', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'Withdraw', method, amount, phone, trx:'N/A', username:this.currentUser.username}) })
-        .then(r=>r.json()).then(d=>{ alert(d.message); if(d.success){ this.balance=d.newBalance; this.updateUI(); } });
-        if(this.withdrawPanel)this.withdrawPanel.destroy(); this.setUIInteractive(true);
-    }
+
+    initDeposit(method) { /* Same */ const amount = parseFloat(prompt(`Amount (Min ${MIN_DEPOSIT}):`)); if (isNaN(amount) || amount < MIN_DEPOSIT) return alert('Invalid Amount'); const phone = prompt('Wallet Number (11 Digit):'); if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number'); this.depositData = { method, amount, phone, trx: null }; if (this.depositPanel) this.depositPanel.destroy(); this.depositPanel = null; this.showTrxVerificationPanel(); }
+    initWithdraw(method) { /* Same */ const amount = parseFloat(prompt(`Amount (Min ${MIN_WITHDRAW}):`)); if (isNaN(amount) || amount < MIN_WITHDRAW || amount > this.balance) return alert('Invalid Amount'); const phone = prompt('Wallet Number (11 Digit):'); if (!/^01\d{9}$/.test(phone)) return alert('Invalid Phone Number'); fetch('/api/transaction', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({type:'Withdraw', method, amount, phone, trx:'N/A', username:this.currentUser.username}) }).then(r=>r.json()).then(d=>{ alert(d.message); if(d.success){ this.balance=d.newBalance; this.updateUI(); } }); if(this.withdrawPanel)this.withdrawPanel.destroy(); this.setUIInteractive(true); }
+    
     showAdminRequestsPanel(type) { if(this.adminPanelContainer)return; fetch('/api/admin/transactions').then(r=>r.json()).then(d=>{ this.createAdminUI(d.filter(t=>t.status==='Pending'&&t.type===type), type); }); }
-    createAdminUI(list, type) {
-        const {width,height}=this.scale; const c=this.add.container(width/2,height/2).setDepth(300); this.adminPanelContainer=c;
-        c.add(this.add.rectangle(0,0,500,700,0x222222).setStrokeStyle(2,0xFFD700));
-        c.add(this.add.text(0,-320,`PENDING ${type.toUpperCase()}`,{fontSize:'28px',fill:'#FFD700'}).setOrigin(0.5));
-        this.addCloseButton(c,()=>{c.destroy();this.adminPanelContainer=null;},320);
-        if(list.length===0) c.add(this.add.text(0,0,"No Requests",{fontSize:'20px',fill:'#AAA'}).setOrigin(0.5));
-        let y=-250;
-        list.slice(0,5).forEach(r=>{
-            c.add(this.add.text(-210,y,`${r.username}: Tk ${r.amount}\n${r.phone} (${r.trx})`,{fontSize:'16px',fill:'#FFF'}));
-            const ok=this.add.text(100,y," [✔] ",{fontSize:'24px',fill:'#0F0'}).setOrigin(0.5).setInteractive({useHandCursor:true});
-            ok.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'approve',r)); c.add(ok);
-            const no=this.add.text(160,y," [X] ",{fontSize:'24px',fill:'#F00'}).setOrigin(0.5).setInteractive({useHandCursor:true});
-            no.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'reject',r)); c.add(no); y+=80;
-        });
-    }
+    createAdminUI(list, type) { /* Same */ const {width,height}=this.scale; const c=this.add.container(width/2,height/2).setDepth(300); this.adminPanelContainer=c; c.add(this.add.rectangle(0,0,500,700,0x222222).setStrokeStyle(2,0xFFD700)); c.add(this.add.text(0,-320,`PENDING ${type}`,{fontSize:'28px',fill:'#FFD700'}).setOrigin(0.5)); this.addCloseButton(c,()=>{c.destroy();this.adminPanelContainer=null;},320); if(list.length===0) c.add(this.add.text(0,0,"No Requests",{fontSize:'20px',fill:'#AAA'}).setOrigin(0.5)); let y=-250; list.slice(0,5).forEach(r=>{ c.add(this.add.text(-210,y,`${r.username}: Tk ${r.amount}\n${r.phone} (${r.trx})`,{fontSize:'16px',fill:'#FFF'})); const ok=this.add.text(100,y," [✔] ",{fontSize:'24px',fill:'#0F0'}).setOrigin(0.5).setInteractive({useHandCursor:true}); ok.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'approve',r)); c.add(ok); const no=this.add.text(160,y," [X] ",{fontSize:'24px',fill:'#F00'}).setOrigin(0.5).setInteractive({useHandCursor:true}); no.on('pointerdown',()=>this.handleAdminAction(r.trx||r.phone,'reject',r)); c.add(no); y+=80; }); }
+    handleAdminAction(trxId, action, req) { fetch('/api/admin/action', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ trxId, action, type: req.type, amount: req.amount, username: req.username }) }).then(() => { alert("Done"); this.adminPanelContainer.destroy(); this.adminPanelContainer = null; this.showAdminRequestsPanel(req.type); }); }
+    
     updateUI() { if(this.balanceText)this.balanceText.setText(`Balance: Tk ${this.balance.toFixed(2)}`); if(this.menuBalanceText)this.menuBalanceText.setText(`Tk ${this.balance.toFixed(2)}`); }
     adjustBet(n) { let b=this.currentBet+n; if(b>=MIN_BET&&b<=MAX_BET){this.currentBet=parseFloat(b.toFixed(2));this.betAdjustText.setText(`Tk ${this.currentBet.toFixed(2)}`);} }
     toggleMenu() { this.isMenuOpen=!this.isMenuOpen; this.tweens.add({targets:this.menuBar,x:this.isMenuOpen?0:-300,duration:300}); }
