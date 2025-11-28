@@ -4,9 +4,12 @@
 const GAME_WIDTH = 540;   
 const GAME_HEIGHT = 960;  
 
+// *** FIXED GRAPHICS LAYOUT ***
 const REEL_COUNT = 4; ROW_COUNT = 3;        
-const REEL_WIDTH = 105; SYMBOL_HEIGHT = 150;  
-const GAP_X = 15; GAP_Y = 15;          
+const REEL_WIDTH = 115; // একটু চওড়া করা হলো
+const SYMBOL_HEIGHT = 160; // একটু লম্বা করা হলো 
+const GAP_X = 8;  // গ্যাপ কমানো হলো
+const GAP_Y = 8;  
 
 const TOTAL_GRID_WIDTH = (REEL_WIDTH * REEL_COUNT) + (GAP_X * (REEL_COUNT - 1));
 const TOTAL_GRID_HEIGHT = (SYMBOL_HEIGHT * ROW_COUNT) + (GAP_Y * (ROW_COUNT - 1));
@@ -31,12 +34,12 @@ const SYMBOL_KEYS = Object.keys(SYMBOL_VALUES);
 // Scene 1: Login Scene
 // =======================================================
 class LoginScene extends Phaser.Scene {
-    constructor() { super('LoginScene'); this.username = ''; this.password = ''; this.mobile = ''; this.newUsername = ''; this.newPassword = ''; }
+    constructor() { super('LoginScene'); this.username = ''; this.password = ''; this.mobile = ''; this.newUsername = ''; this.newPassword = ''; this.refCode = ''; }
     preload() { this.load.image('background', 'assets/new_background.jpg'); }
     create() {
         const { width, height } = this.scale;
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
-        this.add.rectangle(width/2, height/2+50, 450, 550, 0x000000, 0.85).setOrigin(0.5);
+        this.add.rectangle(width/2, height/2+50, 450, 600, 0x000000, 0.85).setOrigin(0.5);
         this.add.text(width/2, 180, 'SuperAce Access', { font: 'bold 40px Arial', fill: '#FFD700' }).setOrigin(0.5); 
         this.loginContainer = this.createLoginUI(width, height);
         this.regContainer = this.createRegistrationUI(width, height);
@@ -58,9 +61,8 @@ class LoginScene extends Phaser.Scene {
     createGlossyBtn(x, y, text, color, cb, w=200, h=60) {
         const btnCont = this.add.container(x, y);
         const bg = this.add.rectangle(0, 0, w, h, color).setInteractive({useHandCursor:true});
-        const shine = this.add.rectangle(0, -h/4, w, h/2, 0xFFFFFF, 0.2); // Glossy Effect
+        const shine = this.add.rectangle(0, -h/4, w, h/2, 0xFFFFFF, 0.2); 
         const txt = this.add.text(0, 0, text, { fontSize: '24px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
-        
         btnCont.add([bg, shine, txt]);
         bg.on('pointerdown', () => {
             this.tweens.add({ targets: btnCont, scale: 0.9, duration: 50, yoyo: true });
@@ -81,10 +83,11 @@ class LoginScene extends Phaser.Scene {
 
     createRegistrationUI(w, h) {
         const c = this.add.container(0, 0);
-        c.add(this.add.text(w/2, 380, 'Registration', { font: 'bold 36px Arial', fill: '#FFF' }).setOrigin(0.5));
-        c.add(this.createInputField(w/2, 500, 'Mobile Number', 'mobile', false));
-        c.add(this.createInputField(w/2, 580, 'Set Username', 'newUsername', false));
-        c.add(this.createInputField(w/2, 660, 'Set Password', 'newPassword', true));
+        c.add(this.add.text(w/2, 350, 'Registration', { font: 'bold 36px Arial', fill: '#FFF' }).setOrigin(0.5));
+        c.add(this.createInputField(w/2, 450, 'Mobile Number', 'mobile', false));
+        c.add(this.createInputField(w/2, 530, 'Set Username', 'newUsername', false));
+        c.add(this.createInputField(w/2, 610, 'Set Password', 'newPassword', true));
+        c.add(this.createInputField(w/2, 690, 'Referral Code (Optional)', 'refCode', false)); // NEW Field
         c.add(this.createGlossyBtn(w/2, 800, 'REGISTER', 0x00FF00, this.handleRegistration.bind(this)).setName('confirmRegBtn'));
         const back = this.add.text(w/2, 900, '< Back to Login', { fontSize: '20px', fill: '#888' }).setOrigin(0.5).setInteractive({useHandCursor:true}).setName('backBtn');
         c.add(back); return c;
@@ -103,7 +106,7 @@ class LoginScene extends Phaser.Scene {
     
     handleRegistration() {
         if(!this.mobile || !this.newUsername || !this.newPassword) return alert('Fill all fields');
-        fetch('/api/register', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mobile:this.mobile, username:this.newUsername, password:this.newPassword}) })
+        fetch('/api/register', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mobile:this.mobile, username:this.newUsername, password:this.newPassword, refCode:this.refCode}) })
         .then(r=>r.json()).then(d=>{ alert(d.message); if(d.success){ this.loginContainer.setVisible(true); this.regContainer.setVisible(false); } });
     }
 }
@@ -122,7 +125,7 @@ class GameScene extends Phaser.Scene {
         this.currentWinRate = 30; 
         this.forceWin = false;
         this.isMenuOpen = false;
-        this.notifTimer = null; // Notification Timer
+        this.pollingTimer = null;
     }
     
     init(data) {
@@ -156,9 +159,12 @@ class GameScene extends Phaser.Scene {
         const { width, height } = this.scale;
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
 
-        const maskShape = this.make.graphics().fillStyle(0xffffff).fillRect(START_X-REEL_WIDTH/2-10, START_Y-SYMBOL_HEIGHT/2-10, TOTAL_GRID_WIDTH+20, TOTAL_GRID_HEIGHT+20);
+        const maskShape = this.make.graphics().fillStyle(0xffffff).fillRect(START_X-REEL_WIDTH/2-5, START_Y-SYMBOL_HEIGHT/2-5, TOTAL_GRID_WIDTH+10, TOTAL_GRID_HEIGHT+10);
         const gridMask = maskShape.createGeometryMask();
-        this.add.image(width/2, START_Y + ((ROW_COUNT-1)*(SYMBOL_HEIGHT+GAP_Y))/2, 'reel_frame_img').setDisplaySize(TOTAL_GRID_WIDTH+60, TOTAL_GRID_HEIGHT+60).setDepth(0); 
+        
+        // BIG FRAME (Adjusted to fit tightly)
+        const absoluteGridCenterY = START_Y + ((ROW_COUNT-1)*(SYMBOL_HEIGHT+GAP_Y))/2;
+        this.add.image(width/2, absoluteGridCenterY, 'reel_frame_img').setDisplaySize(TOTAL_GRID_WIDTH+40, TOTAL_GRID_HEIGHT+40).setDepth(0); 
        
         this.symbols = [];
         for (let reel=0; reel<REEL_COUNT; reel++) {
@@ -166,8 +172,9 @@ class GameScene extends Phaser.Scene {
             for (let row=0; row<ROW_COUNT; row++) {
                 const x = START_X + reel*(REEL_WIDTH+GAP_X); 
                 const y = START_Y + row*(SYMBOL_HEIGHT+GAP_Y); 
+                // Frame and Symbols are now larger and closer
                 this.add.image(x, y, 'golden_frame').setDisplaySize(REEL_WIDTH, SYMBOL_HEIGHT).setDepth(1); 
-                const s = this.add.image(x, y, Phaser.Utils.Array.GetRandom(SYMBOL_KEYS)).setDisplaySize(REEL_WIDTH-25, SYMBOL_HEIGHT-25).setDepth(2).setMask(gridMask);
+                const s = this.add.image(x, y, Phaser.Utils.Array.GetRandom(SYMBOL_KEYS)).setDisplaySize(REEL_WIDTH-15, SYMBOL_HEIGHT-15).setDepth(2).setMask(gridMask);
                 s.originalX = x; s.originalY = y; s.rowIndex = row; 
                 this.symbols[reel][row] = s;
             }
@@ -190,6 +197,10 @@ class GameScene extends Phaser.Scene {
 
         this.betAdjustText = this.add.text(width-80, uiY+5, `Tk ${this.currentBet.toFixed(2)}`, { fill: '#FFD700', fontSize: '24px', fontWeight: 'bold' }).setOrigin(0.5).setDepth(50);
         this.balanceText = this.add.text(20, height-40, `Balance: Tk ${this.balance.toFixed(2)}`, { fill: '#FFF', fontSize: '20px', fontWeight: 'bold' }).setDepth(50);
+        
+        // Refresh Button (Manual)
+        const refBtn = this.add.text(20, height-80, '🔄', {fontSize:'24px'}).setInteractive({useHandCursor:true});
+        refBtn.on('pointerdown', () => this.refreshUserData());
 
         this.menuButton = this.add.text(20, 30, '≡', { fontSize: '40px', fill: '#FFF', padding: 10 }).setOrigin(0, 0.5).setInteractive().setDepth(200); 
         this.menuButton.on('pointerdown', this.toggleMenu, this);
@@ -198,16 +209,26 @@ class GameScene extends Phaser.Scene {
         this.input.once('pointerdown', () => { if (this.sound.context.state === 'suspended') this.sound.context.resume(); });
         this.updateUI();
 
-        // ** ADMIN NOTIFICATION POLLING **
-        if(this.isAdmin) {
-            this.notifTimer = this.time.addEvent({ delay: 10000, callback: this.checkNotifications, callbackScope: this, loop: true });
-        }
+        // ** AUTO REFRESH POLLING (Every 5 seconds) **
+        this.pollingTimer = this.time.addEvent({ delay: 5000, callback: this.refreshUserData, callbackScope: this, loop: true });
+        if(this.isAdmin) this.time.addEvent({ delay: 10000, callback: this.checkNotifications, callbackScope: this, loop: true });
+    }
+
+    refreshUserData() {
+        if(this.isSpinning) return;
+        fetch(`/api/user-data?username=${this.currentUser.username}`).then(r=>r.json()).then(d=>{
+            if(d.success) { 
+                this.balance = d.balance; 
+                this.updateUI(); 
+                if(d.isBanned) { alert("You are BANNED!"); location.reload(); }
+            }
+        });
     }
 
     checkNotifications() {
         fetch('/api/admin/notifications').then(r=>r.json()).then(d => {
             if(d.count > 0) {
-                this.sound.play('win_sound'); // Play sound
+                this.sound.play('win_sound');
                 const notif = this.add.text(this.scale.width/2, 100, `🔔 ${d.count} New Deposit!`, { fontSize: '24px', fill: '#FFF', backgroundColor: '#F00', padding: 10 }).setOrigin(0.5).setDepth(500);
                 this.tweens.add({ targets: notif, y: 150, duration: 500, yoyo: true, repeat: 3, onComplete: () => notif.destroy() });
             }
@@ -246,9 +267,9 @@ class GameScene extends Phaser.Scene {
                     const s = this.symbols[reel][row];
                     this.tweens.add({
                         targets: s, y: s.y - SYMBOL_SHIFT_COUNT*(SYMBOL_HEIGHT+GAP_Y), duration: SPIN_DURATION_PER_REEL*(reel*1.5+4), ease: 'Quad.easeOut',
-                        onUpdate: (t, tg) => { if(Math.random()>0.5) { tg.setTexture(Phaser.Utils.Array.GetRandom(SYMBOL_KEYS)); tg.setDisplaySize(REEL_WIDTH-25, SYMBOL_HEIGHT-25); } },
+                        onUpdate: (t, tg) => { if(Math.random()>0.5) { tg.setTexture(Phaser.Utils.Array.GetRandom(SYMBOL_KEYS)); tg.setDisplaySize(REEL_WIDTH-15, SYMBOL_HEIGHT-15); } },
                         onComplete: (t, tg) => {
-                            const trg = tg[0]; trg.setTexture(result[reel][trg.rowIndex]); trg.setDisplaySize(REEL_WIDTH-25, SYMBOL_HEIGHT-25); trg.y = START_Y + trg.rowIndex*(SYMBOL_HEIGHT+GAP_Y);
+                            const trg = tg[0]; trg.setTexture(result[reel][trg.rowIndex]); trg.setDisplaySize(REEL_WIDTH-15, SYMBOL_HEIGHT-15); trg.y = START_Y + trg.rowIndex*(SYMBOL_HEIGHT+GAP_Y);
                             if(trg.rowIndex === ROW_COUNT-1) this.stopReel();
                         }
                     });
@@ -314,35 +335,45 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // --- UPDATED MENU WITH GLOSSY BUTTONS ---
+    // --- UPDATED MENU WITH SPACE FILLER & REFERRAL ---
     createMenuBar(w, h) {
         const c = this.add.container(-300, 0).setDepth(150); this.menuBar = c;
         c.add(this.add.rectangle(0, h/2, 300, h, 0x111111, 0.98).setOrigin(0, 0.5));
         c.add(this.add.text(150, 50, 'PROFILE', { fontSize: '32px', fill: '#FFD700', fontStyle: 'bold' }).setOrigin(0.5));
         this.menuBalanceText = this.add.text(150, 100, `Tk ${this.balance.toFixed(2)}`, { fontSize: '18px', fill: '#FFF' }).setOrigin(0.5); c.add(this.menuBalanceText);
 
-        let y = 180;
-        c.add(this.createGlossyBtn(150, y, 'DEPOSIT', 0x00FF00, ()=>this.showDepositPanel())); y+=70;
-        c.add(this.createGlossyBtn(150, y, 'WITHDRAW', 0xFFD700, ()=>this.showWithdrawPanel())); y+=70;
-        c.add(this.createGlossyBtn(150, y, 'HISTORY', 0x00AAFF, ()=>this.showHistoryPanel())); y+=70;
-        c.add(this.createGlossyBtn(150, y, 'RULES', 0xFFFFFF, ()=>this.showRulesPanel())); y+=70;
+        let y = 160;
+        c.add(this.createGlossyBtn(150, y, 'DEPOSIT', 0x00FF00, ()=>this.showDepositPanel())); y+=60;
+        c.add(this.createGlossyBtn(150, y, 'WITHDRAW', 0xFFD700, ()=>this.showWithdrawPanel())); y+=60;
+        c.add(this.createGlossyBtn(150, y, 'HISTORY', 0x00AAFF, ()=>this.showHistoryPanel())); y+=60;
+        c.add(this.createGlossyBtn(150, y, 'RULES', 0xFFFFFF, ()=>this.showRulesPanel())); y+=60;
         
+        // ** Colorful Tips (Filling the gap) **
+        const tips = [
+            {t: "🔥 200 Tk Bonus on Referral!", c: "#00FF00"},
+            {t: "🎮 Win Streak = Big Multiplier!", c: "#FFD700"},
+            {t: "⚡ Fast Withdrawal (24h)", c: "#00AAFF"}
+        ];
+        tips.forEach(tip => {
+            c.add(this.add.text(150, y, tip.t, { fontSize: '16px', fill: tip.c, fontStyle: 'italic' }).setOrigin(0.5));
+            y += 25;
+        });
+        y += 10;
+
         if(this.isAdmin) {
-            c.add(this.add.rectangle(150, y, 200, 2, 0x555555).setOrigin(0.5)); y+=20;
-            c.add(this.add.text(150, y, 'ADMIN TOOLS', {fontSize:'16px', fill:'#F00'}).setOrigin(0.5)); y+=30;
-            
+            c.add(this.add.text(150, y, 'ADMIN TOOLS', {fontSize:'16px', fill:'#F00'}).setOrigin(0.5)); y+=25;
             c.add(this.createGlossyBtn(150, y, 'ADD MONEY ($)', 0x333333, () => { 
                 const u = prompt("Username:"); const a = parseFloat(prompt("Amount:")); 
                 if(u && a) fetch('/api/update-balance', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:u, amount:a}) }).then(r=>r.json()).then(d=>alert(d.success?"Added":"Failed"));
-            })); y+=60;
-
-            c.add(this.createGlossyBtn(150, y, 'USER LIST', 0x555555, ()=>this.showUserListPanel())); y+=60;
-            c.add(this.createGlossyBtn(150, y, 'CHECK DEPOSIT', 0x00AAFF, ()=>{this.showAdminRequestsPanel('Deposit');this.toggleMenu();})); y+=60;
-            c.add(this.createGlossyBtn(150, y, 'CHECK WITHDRAW', 0xFF8800, ()=>{this.showAdminRequestsPanel('Withdraw');this.toggleMenu();})); y+=60;
-            
+            }, 200, 40)); y+=50;
+            c.add(this.createGlossyBtn(150, y, 'USER LIST', 0x555555, ()=>this.showUserListPanel(), 200, 40)); y+=50;
+            c.add(this.createGlossyBtn(150, y, 'CHK DEPOSIT', 0x00AAFF, ()=>{this.showAdminRequestsPanel('Deposit');this.toggleMenu();}, 200, 40)); y+=50;
+            c.add(this.createGlossyBtn(150, y, 'CHK WITHDRAW', 0xFF8800, ()=>{this.showAdminRequestsPanel('Withdraw');this.toggleMenu();}, 200, 40)); y+=50;
             const wb = this.add.text(150, y, ` Win: ${this.forceWin?'FORCE':this.currentWinRate+'%'} `, {fontSize:'14px', fill:'#FFF', backgroundColor:'#F00', padding:5}).setOrigin(0.5).setInteractive({useHandCursor:true});
-            wb.on('pointerdown', ()=>{ this.toggleWinRate(wb); });
-            c.add(wb);
+            wb.on('pointerdown', ()=>{ this.toggleWinRate(wb); }); c.add(wb);
+        } else {
+            // User Referral Button
+            c.add(this.createGlossyBtn(150, h-150, 'REFER & EARN', 0xE2136E, ()=>this.showReferralInfo()));
         }
         c.add(this.createGlossyBtn(150, h-80, 'LOGOUT', 0xFF0000, ()=>location.reload()));
     }
@@ -355,6 +386,18 @@ class GameScene extends Phaser.Scene {
         else if(this.currentWinRate===60) { this.forceWin=true; }
         btn.setText(` Win: ${this.forceWin?'FORCE':this.currentWinRate+'%'} `);
         btn.setStyle({ backgroundColor: this.forceWin?'#0A0':(this.currentWinRate>30?'#FFA500':'#F00') });
+    }
+
+    showReferralInfo() {
+        this.showInfoPanel("REFERRAL SYSTEM", `
+Your Username is your Referral Code: 
+👉 ${this.currentUser.username}
+
+1. Share this code with friends.
+2. When they Register using your code, 
+   you get 200 Tk INSTANTLY! 🎉
+3. You get 10% Commission on their deposits! 💰
+`);
     }
 
     // --- USER LIST PANEL WITH BAN ---
@@ -375,20 +418,17 @@ class GameScene extends Phaser.Scene {
 
         const fetchAndShow = (query = '') => {
             fetch('/api/admin/users').then(r=>r.json()).then(users => {
-                c.list.forEach(item => { if(item.name === 'banBtn') item.destroy(); }); // Clear old buttons
-                
-                const filtered = users.filter(u => u.username.includes(query) || u.mobile.includes(query)).slice(0, 7); // Show 7
-                let txt = "NAME | MOBILE | BAL | STATUS\n------------------------------\n";
+                c.list.forEach(item => { if(item.name === 'banBtn') item.destroy(); }); 
+                const filtered = users.filter(u => u.username.includes(query) || u.mobile.includes(query)).slice(0, 7); 
+                let txt = "NAME | MOBILE | BAL | REF\n------------------------------\n";
                 let btnY = -180;
 
                 filtered.forEach(u => {
                     const status = u.isBanned ? "BANNED" : "ACTIVE";
-                    txt += `${u.username} | ${u.mobile} | ${u.balance}\nStatus: ${status}\n\n`;
-                    
+                    txt += `${u.username} | ${u.mobile} | ${u.balance}\nRefBy: ${u.referredBy||'None'} | ${status}\n\n`;
                     if(u.username !== 'admin') {
                         const banBtn = this.add.text(180, btnY, u.isBanned ? " UNBAN " : " BAN ", { fontSize:'14px', fill:'#FFF', backgroundColor: u.isBanned ? '#0A0' : '#F00' })
                             .setOrigin(0.5).setInteractive({useHandCursor:true}).setName('banBtn');
-                        
                         banBtn.on('pointerdown', () => {
                             fetch('/api/admin/ban-user', {
                                 method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -402,12 +442,11 @@ class GameScene extends Phaser.Scene {
                 userListText.setText(txt);
             });
         };
-
         searchBg.on('pointerdown', () => { const q = prompt("Search User:"); if(q !== null) { searchText.setText(q); fetchAndShow(q); } });
         fetchAndShow();
     }
 
-    showRulesPanel() { this.showInfoPanel('GAME RULES & POLICY', `\n-- REGISTRATION POLICY --\n1. One person can have only ONE account.\n2. Multiple accounts with same number/IP will be BANNED permanently.\n\n-- TRANSACTION RULES --\n1. Deposit: Min 50 Tk, Max 5000 Tk.\n2. Withdraw: Min 100 Tk, Max 50,000 Tk.\n3. Always send money to the ACTIVE number.\n4. Input Uppercase TRX ID correctly.\n\n-- WINNING --\n1. 3+ Symbols = Win.\n2. Consecutive wins increase multiplier (x1-x5).`); }
+    showRulesPanel() { this.showInfoPanel('GAME RULES & POLICY', `\n-- REGISTRATION POLICY --\n1. One person can have only ONE account.\n2. Multiple accounts will be BANNED.\n\n-- REFERRAL BONUS --\n1. Invite friends & get 200 Tk per signup!\n2. Get 10% commission on their deposits.\n\n-- TRANSACTION --\n1. Min Dep: 50 Tk, Max: 5000 Tk.\n2. Min Wdr: 100 Tk.\n3. Always send money to ACTIVE number.\n`); }
     
     showHistoryPanel() { 
         const { width, height } = this.scale;
@@ -417,7 +456,7 @@ class GameScene extends Phaser.Scene {
         this.addCloseButton(c, ()=>c.destroy(), 250);
         fetch(`/api/history?username=${this.currentUser.username}`).then(r=>r.json()).then(d=>{
             if(d.length===0) c.add(this.add.text(0,0,"No History",{fontSize:'18px',fill:'#555'}).setOrigin(0.5));
-            else { let y=-200; d.slice(0,7).forEach(i=>{ const col=i.type==='Deposit'?'#0F0':'#F80'; c.add(this.add.text(-200,y,`${i.type}: Tk ${i.amount}\nStatus: ${i.status}`,{fontSize:'16px',fill:col})); c.add(this.add.rectangle(0,y+40,400,1,0x333)); y+=55; }); }
+            else { let y=-200; d.slice(0,7).forEach(i=>{ const col=i.type==='Deposit'?'#0F0':'#F80'; c.add(this.add.text(-200,y,`${i.type}: Tk ${i.amount}\nStatus: ${i.status}\nDate: ${new Date(i.date).toLocaleDateString()}`,{fontSize:'16px',fill:col})); c.add(this.add.rectangle(0,y+50,400,1,0x333)); y+=60; }); }
         });
     }
 
