@@ -8,8 +8,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(bodyParser.json());
-
-// ১. স্ট্যাটিক ফাইল ফোল্ডার চিনিয়ে দেওয়া
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --- SERVER DATABASE (Mock) ---
@@ -41,7 +39,9 @@ app.post('/api/register', (req, res) => {
 
 app.post('/api/transaction', (req, res) => {
     const trxData = req.body; 
-    transactions.push({ ...trxData, status: 'Pending', date: new Date() });
+    // Add Date
+    const newTrx = { ...trxData, status: 'Pending', date: new Date().toLocaleString() };
+    transactions.push(newTrx);
     
     if (trxData.type === 'Withdraw') {
         const user = users.find(u => u.username === trxData.username);
@@ -54,6 +54,15 @@ app.post('/api/transaction', (req, res) => {
     } else {
         res.json({ success: true, message: 'Request Submitted' });
     }
+});
+
+// NEW API: Get User History
+app.get('/api/history', (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.json([]);
+    // Filter transactions for specific user
+    const userHistory = transactions.filter(t => t.username === username);
+    res.json(userHistory.reverse()); // Show latest first
 });
 
 app.post('/api/update-balance', (req, res) => {
@@ -91,13 +100,10 @@ app.post('/api/admin/action', (req, res) => {
     }
 });
 
-// ২. মেইন রুট (সমস্যা সমাধান করা হয়েছে)
-// '*' বা '/(.*)' এর বদলে আমরা সরাসরি রুট ব্যবহার করছি অথবা স্ট্যাটিক ফাইলের উপর নির্ভর করছি
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ৩. সার্ভার চালু
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
 });
