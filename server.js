@@ -27,6 +27,7 @@ const UserSchema = new mongoose.Schema({
     isAdmin: { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
     referredBy: { type: String, default: null }, 
+    ownReferralCode: { type: String, unique: true }, // নিজের ইউনিক রেফার কোড
     totalReferralBonus: { type: Number, default: 0.00 } 
 });
 const User = mongoose.model('User', UserSchema);
@@ -39,7 +40,6 @@ const TransactionSchema = new mongoose.Schema({
 });
 const Transaction = mongoose.model('Transaction', TransactionSchema);
 
-// Settings Schema (Notice Board)
 const SettingsSchema = new mongoose.Schema({
     id: { type: String, default: 'global' },
     notice: { type: String, default: 'Welcome to SuperAce! Good Luck!' }
@@ -52,10 +52,9 @@ async function initAdmin() {
     if (!adminExists) {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash('admin', salt);
-        await new User({ username: 'admin', password: hashedPassword, mobile: '01000000000', balance: 999999999, isAdmin: true }).save();
+        await new User({ username: 'admin', password: hashedPassword, mobile: '01000000000', balance: 999999999, isAdmin: true, ownReferralCode: 'admin01' }).save();
         console.log("🔥 Admin Account Ready!");
     }
-    // Init Settings
     const setExists = await Settings.findOne({ id: 'global' });
     if (!setExists) await new Settings({ id: 'global' }).save();
 }
@@ -63,10 +62,9 @@ initAdmin();
 
 // --- ROUTES ---
 
-// 1. Get Settings
+// 1. Settings
 app.get('/api/settings', async (req, res) => {
-    try { const s = await Settings.findOne({ id: 'global' }); res.json(s); } 
-    catch { res.json({ notice: '' }); }
+    try { const s = await Settings.findOne({ id: 'global' }); res.json(s); } catch { res.json({ notice: '' }); }
 });
 
 // 2. Login
@@ -86,7 +84,7 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// 3. Register
+// 3. Register (Auto Generate Unique Referral Code)
 app.post('/api/register', async (req, res) => {
     const { mobile, username, password, refCode } = req.body;
     try {
@@ -96,33 +94,46 @@ app.post('/api/register', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // Generate Unique Code: username + random 2 digits (e.g., tohin99)
+        const randomNum = Math.floor(Math.random() * 90 + 10);
+        const myCode = `${username}${randomNum}`;
+
         let referrerName = null;
         if (refCode) {
-            const referrer = await User.findOne({ username: refCode });
+            const referrer = await User.findOne({ ownReferralCode: refCode });
             if (referrer) {
-                referrerName = refCode;
+                referrerName = referrer.username; // Save username of referrer
                 referrer.balance += 200;
                 referrer.totalReferralBonus += 200;
                 await referrer.save();
             }
         }
 
-        const newUser = new User({ username, password: hashedPassword, mobile, balance: 0.00, referredBy: referrerName });
+        const newUser = new User({ 
+            username, 
+            password: hashedPassword, 
+            mobile, 
+            balance: 0.00, 
+            referredBy: referrerName,
+            ownReferralCode: myCode 
+        });
+        
         await newUser.save();
-        res.json({ success: true, message: 'Registration Successful!' });
-    } catch (err) { res.status(500).json({ success: false }); }
+        res.json({ success: true, message: 'Registration Successful! Login Now.' });
+    } catch (err) { res.status(500).json({ success: false, message: 'Error creating account' }); }
 });
 
-// 4. Transaction & Balance
+// 4. User Data
 app.get('/api/user-data', async (req, res) => {
     const { username } = req.query;
     try {
         const user = await User.findOne({ username });
-        if (user) res.json({ success: true, balance: user.balance, isBanned: user.isBanned });
+        if (user) res.json({ success: true, balance: user.balance, isBanned: user.isBanned, myCode: user.ownReferralCode });
         else res.json({ success: false });
     } catch (err) { res.json({ success: false }); }
 });
 
+// 5. Transactions
 app.post('/api/transaction', async (req, res) => {
     const trxData = req.body;
     try {
@@ -146,6 +157,7 @@ app.post('/api/transaction', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
+// 6. Update Balance (Game Logic)
 app.post('/api/update-balance', async (req, res) => {
     const { username, amount } = req.body;
     try {
@@ -160,44 +172,27 @@ app.post('/api/update-balance', async (req, res) => {
 });
 
 // --- ADMIN API ---
-app.post('/api/admin/update-notice', async (req, res) => {
-    const { notice } = req.body;
-    await Settings.updateOne({ id: 'global' }, { notice });
-    res.json({ success: true });
-});
-
-app.post('/api/admin/reset-password', async (req, res) => {
-    const { username, newPass } = req.body;
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPass, salt);
-    await User.updateOne({ username }, { password: hashedPassword });
-    res.json({ success: true });
-});
-
-app.get('/api/admin/stats', async (req, res) => {
-    try {
-        const today = new Date(); today.setHours(0,0,0,0);
-        const dep = await Transaction.aggregate([{ $match: { type: 'Deposit', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
-        const wdr = await Transaction.aggregate([{ $match: { type: 'Withdraw', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
-        res.json({ deposit: dep[0]?.total || 0, withdraw: wdr[0]?.total || 0 });
-    } catch { res.json({ deposit: 0, withdraw: 0 }); }
-});
-
 app.post('/api/admin/action', async (req, res) => {
     const { trxId, action, type, amount, username } = req.body;
     try {
         const trx = await Transaction.findOne({ $or: [{ trx: trxId }, { phone: trxId }], status: 'Pending' });
         if (trx) {
             trx.status = action === 'approve' ? 'Success' : 'Failed';
+            trx.seenByAdmin = true;
             await trx.save();
+            
             const user = await User.findOne({ username });
             if (user) {
                 if (action === 'approve' && type === 'Deposit') {
                     user.balance += amount;
-                    // Commission
+                    // Commission 10%
                     if (user.referredBy) {
-                        const ref = await User.findOne({ username: user.referredBy });
-                        if(ref) { ref.balance += amount * 0.10; await ref.save(); }
+                        const referrer = await User.findOne({ username: user.referredBy });
+                        if (referrer) {
+                            referrer.balance += amount * 0.10;
+                            referrer.totalReferralBonus += amount * 0.10;
+                            await referrer.save();
+                        }
                     }
                 }
                 if (action === 'reject' && type === 'Withdraw') user.balance += amount;
@@ -209,8 +204,23 @@ app.post('/api/admin/action', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-app.get('/api/admin/transactions', async (req, res) => { try { const t = await Transaction.find().sort({ date: -1 }).limit(50); res.json(t); } catch { res.json([]); } });
-app.get('/api/admin/users', async (req, res) => { try { const u = await User.find({}, 'username mobile balance isBanned referredBy').sort({ _id: -1 }); res.json(u); } catch { res.json([]); } });
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const dep = await Transaction.aggregate([{ $match: { type: 'Deposit', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
+        const wdr = await Transaction.aggregate([{ $match: { type: 'Withdraw', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
+        res.json({ deposit: dep[0]?.total || 0, withdraw: wdr[0]?.total || 0 });
+    } catch { res.json({ deposit: 0, withdraw: 0 }); }
+});
+
+app.post('/api/admin/update-notice', async (req, res) => {
+    const { notice } = req.body;
+    await Settings.updateOne({ id: 'global' }, { notice });
+    res.json({ success: true });
+});
+
+app.get('/api/admin/transactions', async (req, res) => { try { const t = await Transaction.find().sort({ date: -1 }).limit(100); res.json(t); } catch { res.json([]); } });
+app.get('/api/admin/users', async (req, res) => { try { const u = await User.find({}, 'username mobile balance isBanned ownReferralCode').sort({ _id: -1 }); res.json(u); } catch { res.json([]); } });
 app.post('/api/admin/ban-user', async (req, res) => { try { await User.updateOne({ username: req.body.username }, { isBanned: req.body.banStatus }); res.json({ success: true }); } catch { res.json({ success: false }); } });
 app.get('/api/history', async (req, res) => { try { const h = await Transaction.find({ username: req.query.username }).sort({ date: -1 }).limit(20); res.json(h); } catch { res.json([]); } });
 
