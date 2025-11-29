@@ -1,5 +1,5 @@
 // ===================================
-// ১. কনফিগারেশন
+// ১. কনফিগারেশন (Configuration)
 // ===================================
 const LAYOUT = {
     REEL_WIDTH: 105,
@@ -13,38 +13,36 @@ const LAYOUT = {
 const GAME_WIDTH = 540;   
 const GAME_HEIGHT = 960;  
 
-const REEL_COUNT = 4; ROW_COUNT = 3;        
+const REEL_COUNT = 4; 
+const ROW_COUNT = 3;        
 const TOTAL_GRID_WIDTH = (LAYOUT.REEL_WIDTH * REEL_COUNT) + (LAYOUT.GAP * (REEL_COUNT - 1));
 const START_X = (GAME_WIDTH - TOTAL_GRID_WIDTH) / 2 + (LAYOUT.REEL_WIDTH / 2); 
 
 const SPIN_DURATION_PER_REEL = 200; 
 const SYMBOL_SHIFT_COUNT = 15; 
 
-const MIN_DEPOSIT = 50.00; MAX_DEPOSIT = 5000.00;
-const MIN_WITHDRAW = 100.00; MAX_WITHDRAW = 50000.00; 
-
-const BKASH_NUMBERS = ["01911111101", "01911111102"];
-const NAGAD_NUMBERS = ["01922222201", "01922222202"];
-
 const SYMBOL_KEYS = ['golden_burger', 'ace', 'king', 'queen', 'jack', 'spade'];
 const SYMBOL_VALUES = { 'golden_burger': 50, 'ace': 20, 'king': 15, 'queen': 10, 'jack': 8, 'spade': 5 };
 const MULTIPLIER_LEVELS = [1, 2, 3, 5]; 
 
 // =======================================================
-// Scene 0: Preload (Assets Loading)
+// Scene 0: Preload (Assets Loading - FIXED)
 // =======================================================
 class PreloadScene extends Phaser.Scene {
     constructor() { super('PreloadScene'); }
     preload() {
         const { width, height } = this.scale;
         
-        // Loading Bar
+        // Loading Bar UI
         const progressBar = this.add.graphics();
         const progressBox = this.add.graphics();
         progressBox.fillStyle(0x222222, 0.8);
         progressBox.fillRect(width/2 - 150, height/2, 300, 40);
         
         const percentText = this.add.text(width/2, height/2 + 20, '0%', { font: '18px Arial', fill: '#ffffff' }).setOrigin(0.5);
+
+        // 🔥 CRITICAL FIX: Base path for assets
+        this.load.path = 'assets/'; 
 
         this.load.on('progress', (value) => {
             percentText.setText(parseInt(value * 100) + '%');
@@ -54,23 +52,49 @@ class PreloadScene extends Phaser.Scene {
         });
 
         this.load.on('complete', () => {
+            console.log("Assets Loaded Successfully");
             this.scene.start('LoginScene');
         });
 
-        // --- ASSETS LOAD ---
-        this.load.image('background', 'assets/new_background.jpg');
-        this.load.image('reel_frame_img', 'assets/reel_frame.png'); 
-        this.load.image('golden_frame', 'assets/golden_frame.png'); 
-        this.load.image('bet_button', 'assets/bet_button.png');
-        this.load.image('plus_button', 'assets/plus_button.jpg'); 
-        this.load.image('minus_button', 'assets/minus_button.jpg'); 
-        
-        SYMBOL_KEYS.forEach(k => this.load.image(k, `assets/${k}.png`));
-        this.load.image('coin', 'assets/golden_burger.png'); 
+        this.load.on('loaderror', (file) => {
+            console.error("File missing: " + file.src);
+        });
 
-        this.load.audio('spin_start', 'assets/spin_start.mp3');
-        this.load.audio('reel_stop', 'assets/reel_stop.mp3');
-        this.load.audio('win_sound', 'assets/win_sound.mp3');
+        // --- ASSETS LOAD ---
+        // Names match your screenshot exactly
+
+        // 1. Background
+        this.load.image('background', 'new_background.jpg'); 
+
+        // 2. UI Elements
+        this.load.image('reel_frame_img', 'reel_frame.png'); 
+        this.load.image('golden_frame', 'golden_frame.png'); 
+        this.load.image('bet_button', 'bet_button.png');
+        
+        // Note: These correspond to .jpg in your folder
+        this.load.image('plus_button', 'plus_button.jpg'); 
+        this.load.image('minus_button', 'minus_button.jpg'); 
+        
+        // 3. Symbols
+        this.load.image('golden_burger', 'golden_burger.png');
+        this.load.image('ace', 'ace.png');
+        this.load.image('king', 'king.png');
+        this.load.image('queen', 'queen.png');
+        this.load.image('jack', 'jack.png');
+        this.load.image('spade', 'spade.png');
+
+        // 4. Effects / Others
+        this.load.image('coin', 'coin.png'); // Using actual coin.png from your screenshot
+        
+        // Optional: Sound Icons (if you want to use them later)
+        this.load.image('sound_on', 'sound_on.png');
+        // Make sure you renamed sound_off-.png to sound_off.png
+        this.load.image('sound_off', 'sound_off.png'); 
+
+        // 5. Audio
+        this.load.audio('spin_start', 'spin_start.mp3');
+        this.load.audio('reel_stop', 'reel_stop.mp3');
+        this.load.audio('win_sound', 'win_sound.mp3');
     }
 }
 
@@ -83,7 +107,7 @@ class LoginScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
         
-        // Background Image restored
+        // Background
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
         
         // Logo
@@ -188,7 +212,7 @@ class GameScene extends Phaser.Scene {
         this.isSpinning = false; this.currentBet = 10.00; this.reelsStopped = 0;
         const { width, height } = this.scale;
         
-        // 1. Background (Fixed)
+        // 1. Background
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
 
         // Grid Assets
@@ -196,6 +220,7 @@ class GameScene extends Phaser.Scene {
         const gridMask = maskShape.createGeometryMask();
         
         const frameCenterY = LAYOUT.START_Y + ((ROW_COUNT-1)*(LAYOUT.SYMBOL_HEIGHT+LAYOUT.GAP))/2;
+        // reel_frame_img is a .png
         this.add.image(width/2, frameCenterY, 'reel_frame_img').setDisplaySize(TOTAL_GRID_WIDTH+50, (LAYOUT.SYMBOL_HEIGHT*ROW_COUNT)+60).setDepth(0); 
         
         this.symbols = [];
@@ -216,9 +241,14 @@ class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: this.noticeLabel, x: -600, duration: 12000, repeat: -1 });
         this.fetchSettings();
 
-        // Sound Btn
-        this.soundBtn = this.add.text(width-40, 80, "🔊", { fontSize: '35px' }).setOrigin(0.5).setInteractive({useHandCursor:true});
-        this.soundBtn.on('pointerdown', () => { this.soundEnabled = !this.soundEnabled; this.soundBtn.setText(this.soundEnabled?"🔊":"🔇"); this.sound.mute = !this.soundEnabled; });
+        // Sound Btn (Using Images if available, fallback to text)
+        // Since you have sound_on/off images now, let's use them!
+        this.soundBtn = this.add.image(width-40, 80, 'sound_on').setDisplaySize(50, 50).setInteractive({useHandCursor:true});
+        this.soundBtn.on('pointerdown', () => { 
+            this.soundEnabled = !this.soundEnabled; 
+            this.soundBtn.setTexture(this.soundEnabled ? 'sound_on' : 'sound_off'); 
+            this.sound.mute = !this.soundEnabled; 
+        });
 
         this.multiplierTexts = MULTIPLIER_LEVELS.map((l, i) => this.add.text((width/2-120)+i*80, 180, `x${l}`, { font: 'bold 28px Arial', fill: '#888' }).setOrigin(0.5));
 
@@ -228,6 +258,7 @@ class GameScene extends Phaser.Scene {
         this.spinButton.on('pointerdown', this.startSpin, this);
         this.add.text(width/2, uiY, 'SPIN', { font: 'bold 18px Arial', fill: '#FFD700' }).setOrigin(0.5).setDepth(51);
 
+        // Plus/Minus Buttons (These were .jpg in your folder)
         this.add.image(width-80, uiY-60, 'plus_button').setScale(0.25).setInteractive().on('pointerdown', () => this.adjustBet(1));
         this.add.image(width-80, uiY+60, 'minus_button').setScale(0.25).setInteractive().on('pointerdown', () => this.adjustBet(-1));
         this.betAdjustText = this.add.text(width-80, uiY+5, `Tk ${this.currentBet}`, { fontSize: '24px', fill: '#FFF' }).setOrigin(0.5).setDepth(50);
@@ -298,6 +329,7 @@ class GameScene extends Phaser.Scene {
     }
 
     showWinAnimation(amount) {
+        // Using 'coin' which maps to 'coin.png' now
         const particles = this.add.particles(this.scale.width/2, 0, 'coin', {
             speed: { min: 200, max: 400 }, angle: { min: 80, max: 100 }, scale: { start: 0.5, end: 0.5 }, gravityY: 300, lifespan: 3000, quantity: 10
         });
