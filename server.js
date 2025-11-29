@@ -8,11 +8,22 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://tmtohin177:superace123@cluster0.nsyah8t.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const MONGO_URI = "mongodb+srv://tmtohin177:superace123@cluster0.nsyah8t.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
 app.use(cors());
 app.use(bodyParser.json());
+
+// ==============================================
+// 🔥 গেমের অ্যাসেট ফিক্স (সবচেয়ে গুরুত্বপূর্ণ লাইন)
+// ==============================================
+
+// ১. পুরো পাবলিক ফোল্ডার সেট করা
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ২. আলাদা করে assets ফোল্ডার চিনিয়ে দেওয়া
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
+
+// ==============================================
 
 mongoose.connect(MONGO_URI)
     .then(() => console.log("✅ MongoDB Connected"))
@@ -27,7 +38,7 @@ const UserSchema = new mongoose.Schema({
     isAdmin: { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
     referredBy: { type: String, default: null }, 
-    ownReferralCode: { type: String, unique: true }, // নিজের ইউনিক রেফার কোড
+    ownReferralCode: { type: String, unique: true },
     totalReferralBonus: { type: Number, default: 0.00 } 
 });
 const User = mongoose.model('User', UserSchema);
@@ -84,7 +95,7 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// 3. Register (Auto Generate Unique Referral Code)
+// 3. Register
 app.post('/api/register', async (req, res) => {
     const { mobile, username, password, refCode } = req.body;
     try {
@@ -93,8 +104,6 @@ app.post('/api/register', async (req, res) => {
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-
-        // Generate Unique Code: username + random 2 digits (e.g., tohin99)
         const randomNum = Math.floor(Math.random() * 90 + 10);
         const myCode = `${username}${randomNum}`;
 
@@ -102,7 +111,7 @@ app.post('/api/register', async (req, res) => {
         if (refCode) {
             const referrer = await User.findOne({ ownReferralCode: refCode });
             if (referrer) {
-                referrerName = referrer.username; // Save username of referrer
+                referrerName = referrer.username;
                 referrer.balance += 200;
                 referrer.totalReferralBonus += 200;
                 await referrer.save();
@@ -110,14 +119,8 @@ app.post('/api/register', async (req, res) => {
         }
 
         const newUser = new User({ 
-            username, 
-            password: hashedPassword, 
-            mobile, 
-            balance: 0.00, 
-            referredBy: referrerName,
-            ownReferralCode: myCode 
+            username, password: hashedPassword, mobile, balance: 0.00, referredBy: referrerName, ownReferralCode: myCode 
         });
-        
         await newUser.save();
         res.json({ success: true, message: 'Registration Successful! Login Now.' });
     } catch (err) { res.status(500).json({ success: false, message: 'Error creating account' }); }
@@ -185,7 +188,6 @@ app.post('/api/admin/action', async (req, res) => {
             if (user) {
                 if (action === 'approve' && type === 'Deposit') {
                     user.balance += amount;
-                    // Commission 10%
                     if (user.referredBy) {
                         const referrer = await User.findOne({ username: user.referredBy });
                         if (referrer) {
@@ -204,25 +206,11 @@ app.post('/api/admin/action', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-app.get('/api/admin/stats', async (req, res) => {
-    try {
-        const today = new Date(); today.setHours(0,0,0,0);
-        const dep = await Transaction.aggregate([{ $match: { type: 'Deposit', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
-        const wdr = await Transaction.aggregate([{ $match: { type: 'Withdraw', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
-        res.json({ deposit: dep[0]?.total || 0, withdraw: wdr[0]?.total || 0 });
-    } catch { res.json({ deposit: 0, withdraw: 0 }); }
-});
-
-app.post('/api/admin/update-notice', async (req, res) => {
-    const { notice } = req.body;
-    await Settings.updateOne({ id: 'global' }, { notice });
-    res.json({ success: true });
-});
-
 app.get('/api/admin/transactions', async (req, res) => { try { const t = await Transaction.find().sort({ date: -1 }).limit(100); res.json(t); } catch { res.json([]); } });
 app.get('/api/admin/users', async (req, res) => { try { const u = await User.find({}, 'username mobile balance isBanned ownReferralCode').sort({ _id: -1 }); res.json(u); } catch { res.json([]); } });
 app.post('/api/admin/ban-user', async (req, res) => { try { await User.updateOne({ username: req.body.username }, { isBanned: req.body.banStatus }); res.json({ success: true }); } catch { res.json({ success: false }); } });
 app.get('/api/history', async (req, res) => { try { const h = await Transaction.find({ username: req.query.username }).sort({ date: -1 }).limit(20); res.json(h); } catch { res.json([]); } });
+app.post('/api/admin/update-notice', async (req, res) => { await Settings.updateOne({ id: 'global' }, { notice: req.body.notice }); res.json({ success: true }); });
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 app.listen(PORT, () => { console.log(`Server running at http://localhost:${PORT}`); });

@@ -1,5 +1,5 @@
 // ===================================
-// ১. কনফিগারেশন (Configuration)
+// ১. কনফিগারেশন
 // ===================================
 const LAYOUT = {
     REEL_WIDTH: 105,
@@ -12,36 +12,32 @@ const LAYOUT = {
 
 const GAME_WIDTH = 540;   
 const GAME_HEIGHT = 960;  
-
 const REEL_COUNT = 4; 
 const ROW_COUNT = 3;        
 const TOTAL_GRID_WIDTH = (LAYOUT.REEL_WIDTH * REEL_COUNT) + (LAYOUT.GAP * (REEL_COUNT - 1));
 const START_X = (GAME_WIDTH - TOTAL_GRID_WIDTH) / 2 + (LAYOUT.REEL_WIDTH / 2); 
-
 const SPIN_DURATION_PER_REEL = 200; 
 const SYMBOL_SHIFT_COUNT = 15; 
-
 const SYMBOL_KEYS = ['golden_burger', 'ace', 'king', 'queen', 'jack', 'spade'];
 const SYMBOL_VALUES = { 'golden_burger': 50, 'ace': 20, 'king': 15, 'queen': 10, 'jack': 8, 'spade': 5 };
 const MULTIPLIER_LEVELS = [1, 2, 3, 5]; 
 
 // =======================================================
-// Scene 0: Preload (Assets Loading - FIXED)
+// Scene 0: Preload (Assets Loading Fix)
 // =======================================================
 class PreloadScene extends Phaser.Scene {
     constructor() { super('PreloadScene'); }
     preload() {
         const { width, height } = this.scale;
         
-        // Loading Bar UI
+        // লোডিং বার
         const progressBar = this.add.graphics();
         const progressBox = this.add.graphics();
         progressBox.fillStyle(0x222222, 0.8);
         progressBox.fillRect(width/2 - 150, height/2, 300, 40);
-        
         const percentText = this.add.text(width/2, height/2 + 20, '0%', { font: '18px Arial', fill: '#ffffff' }).setOrigin(0.5);
 
-        // 🔥 CRITICAL FIX: Base path for assets
+        // 🔥 পাথ ফিক্স: সার্ভারে যেন ঠিক ফোল্ডারে খোঁজে
         this.load.path = 'assets/'; 
 
         this.load.on('progress', (value) => {
@@ -52,16 +48,15 @@ class PreloadScene extends Phaser.Scene {
         });
 
         this.load.on('complete', () => {
-            console.log("Assets Loaded Successfully");
+            console.log("All Assets Loaded");
             this.scene.start('LoginScene');
         });
 
         this.load.on('loaderror', (file) => {
-            console.error("File missing: " + file.src);
+            console.error("Missing File: " + file.src);
         });
 
-        // --- ASSETS LOAD ---
-        // Names match your screenshot exactly
+        // --- ASSETS LOAD (আপনার ফোল্ডারের ফাইলের নাম অনুযায়ী) ---
 
         // 1. Background
         this.load.image('background', 'new_background.jpg'); 
@@ -71,7 +66,7 @@ class PreloadScene extends Phaser.Scene {
         this.load.image('golden_frame', 'golden_frame.png'); 
         this.load.image('bet_button', 'bet_button.png');
         
-        // Note: These correspond to .jpg in your folder
+        // JPG Files
         this.load.image('plus_button', 'plus_button.jpg'); 
         this.load.image('minus_button', 'minus_button.jpg'); 
         
@@ -83,13 +78,10 @@ class PreloadScene extends Phaser.Scene {
         this.load.image('jack', 'jack.png');
         this.load.image('spade', 'spade.png');
 
-        // 4. Effects / Others
-        this.load.image('coin', 'coin.png'); // Using actual coin.png from your screenshot
-        
-        // Optional: Sound Icons (if you want to use them later)
+        // 4. Extra
+        this.load.image('coin', 'coin.png'); 
         this.load.image('sound_on', 'sound_on.png');
-        // Make sure you renamed sound_off-.png to sound_off.png
-        this.load.image('sound_off', 'sound_off.png'); 
+        this.load.image('sound_off', 'sound_off.png'); // sound_off-.png রিনেম করে sound_off.png করবেন
 
         // 5. Audio
         this.load.audio('spin_start', 'spin_start.mp3');
@@ -109,8 +101,6 @@ class LoginScene extends Phaser.Scene {
         
         // Background
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
-        
-        // Logo
         this.add.text(width/2, 100, 'SuperAce Casino', { font: 'bold 45px Arial', fill: '#FFD700', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5); 
 
         // Container Box
@@ -194,9 +184,6 @@ class GameScene extends Phaser.Scene {
         super('GameScene');
         this.currentUser = null;
         this.depositData = { method: '', amount: 0, phone: '', trx: '' }; 
-        this.multiplierIndex = 0; 
-        this.multiplierTexts = []; 
-        this.forceWin = false;
         this.soundEnabled = true;
     }
     
@@ -212,7 +199,7 @@ class GameScene extends Phaser.Scene {
         this.isSpinning = false; this.currentBet = 10.00; this.reelsStopped = 0;
         const { width, height } = this.scale;
         
-        // 1. Background
+        // Background
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
 
         // Grid Assets
@@ -220,7 +207,6 @@ class GameScene extends Phaser.Scene {
         const gridMask = maskShape.createGeometryMask();
         
         const frameCenterY = LAYOUT.START_Y + ((ROW_COUNT-1)*(LAYOUT.SYMBOL_HEIGHT+LAYOUT.GAP))/2;
-        // reel_frame_img is a .png
         this.add.image(width/2, frameCenterY, 'reel_frame_img').setDisplaySize(TOTAL_GRID_WIDTH+50, (LAYOUT.SYMBOL_HEIGHT*ROW_COUNT)+60).setDepth(0); 
         
         this.symbols = [];
@@ -241,8 +227,7 @@ class GameScene extends Phaser.Scene {
         this.tweens.add({ targets: this.noticeLabel, x: -600, duration: 12000, repeat: -1 });
         this.fetchSettings();
 
-        // Sound Btn (Using Images if available, fallback to text)
-        // Since you have sound_on/off images now, let's use them!
+        // Sound Btn
         this.soundBtn = this.add.image(width-40, 80, 'sound_on').setDisplaySize(50, 50).setInteractive({useHandCursor:true});
         this.soundBtn.on('pointerdown', () => { 
             this.soundEnabled = !this.soundEnabled; 
@@ -250,7 +235,7 @@ class GameScene extends Phaser.Scene {
             this.sound.mute = !this.soundEnabled; 
         });
 
-        this.multiplierTexts = MULTIPLIER_LEVELS.map((l, i) => this.add.text((width/2-120)+i*80, 180, `x${l}`, { font: 'bold 28px Arial', fill: '#888' }).setOrigin(0.5));
+        MULTIPLIER_LEVELS.forEach((l, i) => this.add.text((width/2-120)+i*80, 180, `x${l}`, { font: 'bold 28px Arial', fill: '#888' }).setOrigin(0.5));
 
         // Controls
         const uiY = height - 100; 
@@ -258,7 +243,6 @@ class GameScene extends Phaser.Scene {
         this.spinButton.on('pointerdown', this.startSpin, this);
         this.add.text(width/2, uiY, 'SPIN', { font: 'bold 18px Arial', fill: '#FFD700' }).setOrigin(0.5).setDepth(51);
 
-        // Plus/Minus Buttons (These were .jpg in your folder)
         this.add.image(width-80, uiY-60, 'plus_button').setScale(0.25).setInteractive().on('pointerdown', () => this.adjustBet(1));
         this.add.image(width-80, uiY+60, 'minus_button').setScale(0.25).setInteractive().on('pointerdown', () => this.adjustBet(-1));
         this.betAdjustText = this.add.text(width-80, uiY+5, `Tk ${this.currentBet}`, { fontSize: '24px', fill: '#FFF' }).setOrigin(0.5).setDepth(50);
@@ -329,7 +313,6 @@ class GameScene extends Phaser.Scene {
     }
 
     showWinAnimation(amount) {
-        // Using 'coin' which maps to 'coin.png' now
         const particles = this.add.particles(this.scale.width/2, 0, 'coin', {
             speed: { min: 200, max: 400 }, angle: { min: 80, max: 100 }, scale: { start: 0.5, end: 0.5 }, gravityY: 300, lifespan: 3000, quantity: 10
         });
@@ -351,7 +334,7 @@ class GameScene extends Phaser.Scene {
 
     getSpinResult() {
         const grid = Array.from({length:REEL_COUNT},()=>[]);
-        const isWin = this.forceWin || (Phaser.Math.Between(1,100) <= 30);
+        const isWin = (Phaser.Math.Between(1,100) <= 30);
         const winSym = isWin ? Phaser.Utils.Array.GetRandom(SYMBOL_KEYS) : null;
         const winRow = isWin ? Phaser.Math.Between(0, ROW_COUNT-1) : -1;
         const match = isWin ? Phaser.Math.Between(3, REEL_COUNT) : 0;
@@ -367,7 +350,7 @@ class GameScene extends Phaser.Scene {
         return grid;
     }
 
-    // --- MENU SYSTEM ---
+    // --- MENU & SYSTEM ---
     createMenuBar(w, h) {
         const c = this.add.container(-350, 0).setDepth(999); this.menuBar = c;
         c.add(this.add.rectangle(0, h/2, 350, h, 0x111111).setOrigin(0, 0.5).setStrokeStyle(2, 0xFFD700));
@@ -376,7 +359,6 @@ class GameScene extends Phaser.Scene {
         this.menuBalance = this.add.text(175, 120, `Bal: Tk ${this.balance.toFixed(2)}`, { fontSize: '20px', fill: '#FFF' }).setOrigin(0.5);
         c.add(this.menuBalance);
         
-        // Show Referral Code
         const refCode = this.add.text(175, 150, `My Ref Code: ${this.currentUser.myCode || 'N/A'}`, { fontSize: '18px', fill: '#0F0' }).setOrigin(0.5);
         c.add(refCode);
 
@@ -406,28 +388,14 @@ class GameScene extends Phaser.Scene {
     }
 
     showReferralInfo() {
-        this.showInfoPanel("REFERRAL SYSTEM", `
-Your Code: ${this.currentUser.myCode || 'N/A'}
-
-1. Share this code with friends.
-2. When they register using your code:
-   👉 You get 200 Tk Bonus!
-   👉 You earn 10% commission on every deposit!
-`);
+        this.showInfoPanel("REFERRAL SYSTEM", `Your Code: ${this.currentUser.myCode || 'N/A'}\n\n1. Share code with friends.\n2. You get 200 Tk Bonus!\n3. 10% commission on deposit!`);
     }
 
     showRulesPanel() {
-        this.showInfoPanel("GAME RULES", `
-1. Use valid Bkash/Nagad number.
-2. Minimum Deposit: Tk 50
-3. Minimum Withdraw: Tk 100
-4. Do NOT use fake TrxID (Ban risk).
-5. One account per person.
-6. Server decision is final.
-`);
+        this.showInfoPanel("GAME RULES", `1. Valid Bkash/Nagad number.\n2. Min Deposit: 50\n3. Min Withdraw: 100\n4. No fake TrxID.\n5. Server decision is final.`);
     }
 
-    // --- CONSOLIDATED ADMIN DASHBOARD ---
+    // --- ADMIN & MODALS ---
     showAdminDashboard() {
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(500);
@@ -445,7 +413,6 @@ Your Code: ${this.currentUser.myCode || 'N/A'}
         tools.forEach(t => { c.add(this.createGlossyBtn(0, y, t.t, 0xFFFFFF, t.cb)); y+=80; });
     }
 
-    // --- PAYMENTS & HISTORY ---
     showDepositPanel() { this.showPaymentModal('DEPOSIT', 0xE2136E, 0xF58220); }
     showWithdrawPanel() { this.showPaymentModal('WITHDRAW', 0xE2136E, 0xF58220); }
 
