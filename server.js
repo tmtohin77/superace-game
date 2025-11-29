@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// আপনার MongoDB কানেকশন স্ট্রিং
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://tmtohin177:superace123@cluster0.nsyah8t.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
 app.use(cors());
@@ -26,8 +27,8 @@ const UserSchema = new mongoose.Schema({
     balance: { type: Number, default: 0.00 },
     isAdmin: { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
-    referredBy: { type: String, default: null }, // কে রেফার করেছে
-    totalReferralBonus: { type: Number, default: 0.00 } // মোট কত বোনাস পেল
+    referredBy: { type: String, default: null },
+    totalReferralBonus: { type: Number, default: 0.00 }
 });
 const User = mongoose.model('User', UserSchema);
 
@@ -39,6 +40,14 @@ const TransactionSchema = new mongoose.Schema({
 });
 const Transaction = mongoose.model('Transaction', TransactionSchema);
 
+// গেম সেটিংস (নোটিশ বোর্ড ইত্যাদির জন্য)
+const SettingsSchema = new mongoose.Schema({
+    id: { type: String, default: 'global' },
+    notice: { type: String, default: 'Welcome to SuperAce! Enjoy the game.' },
+    isMaintenance: { type: Boolean, default: false }
+});
+const Settings = mongoose.model('Settings', SettingsSchema);
+
 // Admin Init
 async function initAdmin() {
     const adminExists = await User.findOne({ username: 'admin' });
@@ -48,19 +57,18 @@ async function initAdmin() {
         await new User({ username: 'admin', password: hashedPassword, mobile: '01000000000', balance: 999999999, isAdmin: true }).save();
         console.log("🔥 Admin Account Ready!");
     }
+    // Init Settings
+    const settingsExists = await Settings.findOne({ id: 'global' });
+    if (!settingsExists) await new Settings({ id: 'global' }).save();
 }
 initAdmin();
 
 // --- ROUTES ---
 
-// 1. Get User Data (Auto Refresh)
-app.get('/api/user-data', async (req, res) => {
-    const { username } = req.query;
-    try {
-        const user = await User.findOne({ username });
-        if (user) res.json({ success: true, balance: user.balance, isBanned: user.isBanned });
-        else res.json({ success: false });
-    } catch (err) { res.json({ success: false }); }
+// 1. Get Settings (Notice Board)
+app.get('/api/settings', async (req, res) => {
+    const s = await Settings.findOne({ id: 'global' });
+    res.json(s);
 });
 
 // 2. Login
@@ -80,7 +88,7 @@ app.post('/api/login', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// 3. Register (with Referral)
+// 3. Register
 app.post('/api/register', async (req, res) => {
     const { mobile, username, password, refCode } = req.body;
     try {
@@ -91,33 +99,32 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         let referrerName = null;
-        
-        // Referral Check
         if (refCode) {
             const referrer = await User.findOne({ username: refCode });
             if (referrer) {
                 referrerName = refCode;
-                // Give 200 Tk Bonus to Referrer Immediately
                 referrer.balance += 200;
                 referrer.totalReferralBonus += 200;
                 await referrer.save();
             }
         }
 
-        const newUser = new User({ 
-            username, 
-            password: hashedPassword, 
-            mobile, 
-            balance: 0.00,
-            referredBy: referrerName
-        });
-        
+        const newUser = new User({ username, password: hashedPassword, mobile, balance: 0.00, referredBy: referrerName });
         await newUser.save();
         res.json({ success: true, message: 'Registration Successful!' });
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// 4. Transaction
+// 4. Transaction & Balance
+app.get('/api/user-data', async (req, res) => {
+    const { username } = req.query;
+    try {
+        const user = await User.findOne({ username });
+        if (user) res.json({ success: true, balance: user.balance, isBanned: user.isBanned });
+        else res.json({ success: false });
+    } catch (err) { res.json({ success: false }); }
+});
+
 app.post('/api/transaction', async (req, res) => {
     const trxData = req.body;
     try {
@@ -141,7 +148,6 @@ app.post('/api/transaction', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// 5. Update Balance (Game Logic)
 app.post('/api/update-balance', async (req, res) => {
     const { username, amount } = req.body;
     try {
@@ -155,7 +161,8 @@ app.post('/api/update-balance', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// 6. Admin Action (With Commission)
+// --- ADMIN ROUTES ---
+
 app.post('/api/admin/action', async (req, res) => {
     const { trxId, action, type, amount, username } = req.body;
     try {
@@ -169,12 +176,10 @@ app.post('/api/admin/action', async (req, res) => {
             if (user) {
                 if (action === 'approve' && type === 'Deposit') {
                     user.balance += amount;
-                    
-                    // 10% Referral Commission
                     if (user.referredBy) {
                         const referrer = await User.findOne({ username: user.referredBy });
                         if (referrer) {
-                            const commission = amount * 0.10; // 10%
+                            const commission = amount * 0.10;
                             referrer.balance += commission;
                             referrer.totalReferralBonus += commission;
                             await referrer.save();
@@ -182,7 +187,6 @@ app.post('/api/admin/action', async (req, res) => {
                     }
                 }
                 if (action === 'reject' && type === 'Withdraw') user.balance += amount;
-                
                 user.balance = parseFloat(user.balance.toFixed(2));
                 await user.save();
             }
@@ -191,9 +195,48 @@ app.post('/api/admin/action', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// Other Admin APIs
+// Profit/Loss & Filtered Stats
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        
+        const deposits = await Transaction.aggregate([
+            { $match: { type: 'Deposit', status: 'Success', date: { $gte: today } } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+        const withdraws = await Transaction.aggregate([
+            { $match: { type: 'Withdraw', status: 'Success', date: { $gte: today } } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+
+        const totalDep = deposits.length ? deposits[0].total : 0;
+        const totalWdr = withdraws.length ? withdraws[0].total : 0;
+        
+        res.json({ 
+            deposit: totalDep, 
+            withdraw: totalWdr, 
+            profit: totalDep - totalWdr 
+        });
+    } catch { res.json({ deposit: 0, withdraw: 0, profit: 0 }); }
+});
+
+app.post('/api/admin/update-notice', async (req, res) => {
+    const { notice } = req.body;
+    await Settings.updateOne({ id: 'global' }, { notice });
+    res.json({ success: true });
+});
+
+app.post('/api/admin/reset-password', async (req, res) => {
+    const { username, newPass } = req.body;
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPass, salt);
+    await User.updateOne({ username }, { password: hashedPassword });
+    res.json({ success: true });
+});
+
 app.get('/api/admin/transactions', async (req, res) => {
-    try { const t = await Transaction.find().sort({ date: -1 }).limit(50); res.json(t); } catch { res.json([]); }
+    try { const t = await Transaction.find().sort({ date: -1 }).limit(100); res.json(t); } catch { res.json([]); }
 });
 app.get('/api/admin/users', async (req, res) => {
     try { const u = await User.find({}, 'username mobile balance isBanned referredBy').sort({ _id: -1 }); res.json(u); } catch { res.json([]); }
