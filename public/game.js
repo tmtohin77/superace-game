@@ -13,6 +13,10 @@ const START_Y = 320;
 const REEL_COUNT = 4; 
 const ROW_COUNT = 3;        
 const TOTAL_GRID_WIDTH = (REEL_WIDTH * REEL_COUNT) + (GAP * (REEL_COUNT - 1));
+
+// *** মিসিং লাইনটি এখানে যোগ করা হলো ***
+const START_X = (GAME_WIDTH - TOTAL_GRID_WIDTH) / 2 + (REEL_WIDTH / 2); 
+
 const SPIN_DURATION_PER_REEL = 200; 
 const SYMBOL_SHIFT_COUNT = 15; 
 
@@ -31,7 +35,6 @@ const NAGAD_NUMBERS = ["01922222201", "01922222202", "01922222203", "01922222204
 
 const MULTIPLIER_LEVELS = [1, 2, 3, 5]; 
 const SYMBOL_VALUES = { 'golden_burger': 50, 'ace': 20, 'king': 15, 'queen': 10, 'jack': 8, 'spade': 5 };
-// সিম্বল কি (Key) গুলো ম্যানুয়ালি দেওয়া হলো যাতে লুপে ভুল না হয়
 const SYMBOL_KEYS = ['golden_burger', 'ace', 'king', 'queen', 'jack', 'spade'];
 
 // =======================================================
@@ -47,7 +50,7 @@ class LoginScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
-        this.add.rectangle(width/2, height/2, width, height, 0x000000, 0.7); // Dark Overlay
+        this.add.rectangle(width/2, height/2, width, height, 0x000000, 0.7); 
 
         this.add.text(width/2, 150, 'SuperAce Casino', { font: 'bold 45px Arial', fill: '#FFD700', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5); 
 
@@ -119,7 +122,7 @@ class LoginScene extends Phaser.Scene {
 }
 
 // =======================================================
-// Scene 2: Game Scene (Crash Fixed)
+// Scene 2: Game Scene
 // =======================================================
 class GameScene extends Phaser.Scene {
     constructor() {
@@ -141,7 +144,6 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        // Explicitly loading assets to prevent missing key errors
         this.load.image('background', 'assets/new_background.jpg');
         this.load.image('reel_frame_img', 'assets/reel_frame.png'); 
         this.load.image('golden_frame', 'assets/golden_frame.png'); 
@@ -149,37 +151,26 @@ class GameScene extends Phaser.Scene {
         this.load.image('plus_button', 'assets/plus_button.jpg'); 
         this.load.image('minus_button', 'assets/minus_button.jpg'); 
         
-        // Symbols
-        this.load.image('ace', 'assets/ace.png');
-        this.load.image('king', 'assets/king.png');
-        this.load.image('queen', 'assets/queen.png');
-        this.load.image('jack', 'assets/jack.png');
-        this.load.image('spade', 'assets/spade.png');
-        this.load.image('golden_burger', 'assets/golden_burger.png');
+        SYMBOL_KEYS.forEach(k => this.load.image(k, `assets/${k}.png`));
         
-        // Audio
         this.load.audio('spin_start', 'assets/spin_start.mp3');
         this.load.audio('reel_stop', 'assets/reel_stop.mp3');
         this.load.audio('win_sound', 'assets/win_sound.mp3');
     }
 
     create() {
-        try { // SAFETY BLOCK START
+        try {
             this.isSpinning = false; this.currentBet = 10.00; this.reelsStopped = 0;
             const { width, height } = this.scale;
             
-            // 1. Background
             this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
 
-            // Grid Mask
             const maskShape = this.make.graphics().fillStyle(0xffffff).fillRect(START_X-REEL_WIDTH/2-5, START_Y-SYMBOL_HEIGHT/2-5, TOTAL_GRID_WIDTH+10, (SYMBOL_HEIGHT*ROW_COUNT)+(GAP*ROW_COUNT)+20);
             const gridMask = maskShape.createGeometryMask();
             
-            // 2. Big Frame
             const frameCenterY = START_Y + ((ROW_COUNT-1)*(SYMBOL_HEIGHT+GAP))/2;
             this.add.image(width/2, frameCenterY, 'reel_frame_img').setDisplaySize(TOTAL_GRID_WIDTH+50, (SYMBOL_HEIGHT*ROW_COUNT)+60).setDepth(0); 
         
-            // 3. Reels & Symbols
             this.symbols = [];
             for (let reel=0; reel<REEL_COUNT; reel++) {
                 this.symbols[reel] = []; 
@@ -188,33 +179,25 @@ class GameScene extends Phaser.Scene {
                     const y = START_Y + row*(SYMBOL_HEIGHT+GAP); 
                     
                     this.add.image(x, y, 'golden_frame').setDisplaySize(REEL_WIDTH, SYMBOL_HEIGHT).setDepth(1); 
-                    
-                    const s = this.add.image(x, y, Phaser.Utils.Array.GetRandom(SYMBOL_KEYS))
-                        .setDisplaySize(REEL_WIDTH-20, SYMBOL_HEIGHT-20)
-                        .setDepth(2).setMask(gridMask);
+                    const s = this.add.image(x, y, Phaser.Utils.Array.GetRandom(SYMBOL_KEYS)).setDisplaySize(REEL_WIDTH-20, SYMBOL_HEIGHT-20).setDepth(2).setMask(gridMask);
                     s.originalX = x; s.originalY = y; s.rowIndex = row; 
                     this.symbols[reel][row] = s;
                 }
             }
 
-            // Header
             this.add.text(width/2, 60, 'SuperAce', { font: 'bold 48px Arial', fill: '#FFD700', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5); 
             this.multiplierTexts = MULTIPLIER_LEVELS.map((l, i) => this.add.text((width/2-120)+i*80, 130, `x${l}`, { font: 'bold 28px Arial', fill: '#888' }).setOrigin(0.5));
 
-            // UI Controls
             const uiY = height - 100; 
             
-            // Spin Button
             this.spinButton = this.add.image(width/2, uiY, 'bet_button').setScale(0.08).setInteractive().setDepth(50);
             this.spinButton.on('pointerdown', this.startSpin, this);
             this.add.text(width/2, uiY, 'SPIN', { font: 'bold 18px Arial', fill: '#FFD700' }).setOrigin(0.5).setDepth(51);
 
-            // Bet Controls
             this.add.image(width-80, uiY-50, 'plus_button').setScale(0.2).setInteractive().on('pointerdown', () => this.adjustBet(1));
             this.add.image(width-80, uiY+50, 'minus_button').setScale(0.2).setInteractive().on('pointerdown', () => this.adjustBet(-1));
             this.betAdjustText = this.add.text(width-80, uiY+5, `Tk ${this.currentBet}`, { fontSize: '24px', fill: '#FFF' }).setOrigin(0.5).setDepth(50);
             
-            // Balance & Menu
             this.balanceText = this.add.text(20, height-40, `Balance: Tk ${this.balance.toFixed(2)}`, { fontSize: '20px', fill: '#FFF' }).setDepth(50);
             this.menuButton = this.add.text(20, 40, '≡', { fontSize: '50px', fill: '#FFF' }).setOrigin(0, 0.5).setInteractive().setDepth(200); 
             this.menuButton.on('pointerdown', this.toggleMenu, this);
@@ -222,8 +205,6 @@ class GameScene extends Phaser.Scene {
             this.centerWinText = this.add.text(width/2, height/2, '', { font: 'bold 60px Arial', fill: '#FF0', stroke:'#F00', strokeThickness:8 }).setOrigin(0.5).setVisible(false).setDepth(100);
 
             this.createMenuBar(width, height);
-            
-            // Auto Refresh User Data
             this.time.addEvent({ delay: 5000, callback: this.refreshUserData, callbackScope: this, loop: true });
 
         } catch (e) {
@@ -238,7 +219,6 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // --- GAMEPLAY LOGIC ---
     startSpin() {
         if (this.balance < this.currentBet) { alert('Insufficient Balance!'); this.showDepositPanel(); return; }
         if (this.isSpinning) return; 
@@ -252,7 +232,7 @@ class GameScene extends Phaser.Scene {
             if(d.success) {
                 this.balance = d.newBalance; 
                 this.updateUI();
-                try { this.sound.play('spin_start'); } catch(e){} // Safe sound
+                try { this.sound.play('spin_start'); } catch(e){} 
                 
                 const result = this.getSpinResult();
                 this.reelsStopped = 0;
@@ -321,7 +301,6 @@ class GameScene extends Phaser.Scene {
         return grid;
     }
 
-    // --- MENU SYSTEM ---
     createMenuBar(w, h) {
         const c = this.add.container(-350, 0).setDepth(200); this.menuBar = c;
         c.add(this.add.rectangle(0, h/2, 350, h, 0x111111).setOrigin(0, 0.5).setStrokeStyle(2, 0xFFD700));
@@ -359,7 +338,6 @@ class GameScene extends Phaser.Scene {
         return c;
     }
 
-    // --- 3. PAYMENT PANEL (COLOR FIXED) ---
     showDepositPanel() { this.showPaymentModal('DEPOSIT', 0xE2136E, 0xF58220); }
     showWithdrawPanel() { this.showPaymentModal('WITHDRAW', 0xE2136E, 0xF58220); }
 
@@ -445,7 +423,6 @@ class GameScene extends Phaser.Scene {
         c.add(cls);
     }
 
-    // --- 4. ADMIN USER LIST (FIXED) ---
     showUserListPanel() {
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(500);
@@ -483,7 +460,6 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // --- ADMIN TRANSACTIONS (FIXED) ---
     showAdminRequestsPanel(type) {
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(500);
