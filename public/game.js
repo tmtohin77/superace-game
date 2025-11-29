@@ -1,15 +1,17 @@
 // ===================================
-// ১. গেম কনফিগারেশন ও সাইজ
+// ১. কনফিগারেশন
 // ===================================
-const GAME_WIDTH = 540;   
-const GAME_HEIGHT = 960;  
-
 const LAYOUT = {
     REEL_WIDTH: 105,
     SYMBOL_HEIGHT: 140,
     GAP: 10,
-    START_Y: 340 
+    START_Y: 340,
+    BTN_W: 240,
+    BTN_H: 60
 };
+
+const GAME_WIDTH = 540;   
+const GAME_HEIGHT = 960;  
 
 const REEL_COUNT = 4; ROW_COUNT = 3;        
 const TOTAL_GRID_WIDTH = (LAYOUT.REEL_WIDTH * REEL_COUNT) + (LAYOUT.GAP * (REEL_COUNT - 1));
@@ -29,20 +31,19 @@ const SYMBOL_VALUES = { 'golden_burger': 50, 'ace': 20, 'king': 15, 'queen': 10,
 const MULTIPLIER_LEVELS = [1, 2, 3, 5]; 
 
 // =======================================================
-// Scene 0: Preload
+// Scene 0: Preload (Assets Loading)
 // =======================================================
 class PreloadScene extends Phaser.Scene {
     constructor() { super('PreloadScene'); }
     preload() {
         const { width, height } = this.scale;
         
-        // Loading UI
+        // Loading Bar
         const progressBar = this.add.graphics();
         const progressBox = this.add.graphics();
         progressBox.fillStyle(0x222222, 0.8);
         progressBox.fillRect(width/2 - 150, height/2, 300, 40);
         
-        const loadingText = this.add.text(width/2, height/2 - 30, 'Loading...', { font: '20px Arial', fill: '#ffffff' }).setOrigin(0.5);
         const percentText = this.add.text(width/2, height/2 + 20, '0%', { font: '18px Arial', fill: '#ffffff' }).setOrigin(0.5);
 
         this.load.on('progress', (value) => {
@@ -53,16 +54,17 @@ class PreloadScene extends Phaser.Scene {
         });
 
         this.load.on('complete', () => {
-            this.time.delayedCall(500, () => this.scene.start('LoginScene'));
+            this.scene.start('LoginScene');
         });
 
-        // Load Assets
+        // --- ASSETS LOAD ---
         this.load.image('background', 'assets/new_background.jpg');
         this.load.image('reel_frame_img', 'assets/reel_frame.png'); 
         this.load.image('golden_frame', 'assets/golden_frame.png'); 
         this.load.image('bet_button', 'assets/bet_button.png');
         this.load.image('plus_button', 'assets/plus_button.jpg'); 
         this.load.image('minus_button', 'assets/minus_button.jpg'); 
+        
         SYMBOL_KEYS.forEach(k => this.load.image(k, `assets/${k}.png`));
         this.load.image('coin', 'assets/golden_burger.png'); 
 
@@ -81,15 +83,15 @@ class LoginScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
         
-        // 1. Background Image
+        // Background Image restored
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
         
-        // Dark Overlay for Content
-        const boxY = height/2 + 30;
-        this.add.rectangle(width/2, boxY, 480, 650, 0x000000, 0.7).setStrokeStyle(3, 0xFFD700);
+        // Logo
+        this.add.text(width/2, 100, 'SuperAce Casino', { font: 'bold 45px Arial', fill: '#FFD700', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5); 
 
-        // Header Title (Outside box)
-        this.add.text(width/2, 120, 'SuperAce Casino', { font: 'bold 45px Arial', fill: '#FFD700', stroke: '#000', strokeThickness: 6 }).setOrigin(0.5); 
+        // Container Box
+        const boxY = height/2 + 40;
+        this.add.rectangle(width/2, boxY, 480, 650, 0x000000, 0.7).setStrokeStyle(3, 0xFFD700);
 
         this.loginContainer = this.createLoginUI(width, boxY);
         this.regContainer = this.createRegistrationUI(width, boxY);
@@ -97,7 +99,7 @@ class LoginScene extends Phaser.Scene {
     }
 
     createInputField(x, y, p, n, isP) { 
-        const bg = this.add.rectangle(x, y, 350, 55, 0xFFFFFF).setStrokeStyle(2, 0xFFD700).setInteractive({ useHandCursor: true });
+        const bg = this.add.rectangle(x, y, 350, 55, 0xFFFFFF).setStrokeStyle(2, 0x555555).setInteractive({ useHandCursor: true });
         const txt = this.add.text(x-160, y, p, { fontSize: '20px', fill: '#555', fontStyle: 'bold' }).setOrigin(0, 0.5);
         bg.on('pointerdown', () => {
             let v = prompt(`${p}:`, this[n] || '');
@@ -106,14 +108,16 @@ class LoginScene extends Phaser.Scene {
         return this.add.container(0, 0, [bg, txt]);
     }
 
-    createBtn(x, y, text, color, cb) {
+    createBtn(x, y, text, color, txtColor, cb) {
+        const c = this.add.container(x, y);
         const bg = this.add.rectangle(0, 0, 250, 60, color).setInteractive({useHandCursor:true});
-        const txt = this.add.text(0, 0, text, { fontSize: '26px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
+        const txt = this.add.text(0, 0, text, { fontSize: '26px', fill: txtColor, fontStyle: 'bold' }).setOrigin(0.5);
+        c.add([bg, txt]);
         bg.on('pointerdown', () => {
-            this.tweens.add({ targets: [bg, txt], scale: 0.9, duration: 50, yoyo: true });
+            this.tweens.add({ targets: c, scale: 0.9, duration: 50, yoyo: true });
             this.time.delayedCall(100, cb);
         });
-        return this.add.container(x, y, [bg, txt]);
+        return c;
     }
 
     createLoginUI(w, centerY) {
@@ -122,8 +126,9 @@ class LoginScene extends Phaser.Scene {
         c.add(this.add.text(w/2, startY, 'MEMBER LOGIN', { fontSize: '32px', fill: '#FFF', fontStyle: 'bold' }).setOrigin(0.5));
         c.add(this.createInputField(w/2, startY + 80, 'Username / Mobile', 'username', false));
         c.add(this.createInputField(w/2, startY + 160, 'Password', 'password', true));
-        c.add(this.createBtn(w/2, startY + 260, 'LOGIN', 0xFFD700, this.handleLogin.bind(this)));
-        const reg = this.add.text(w/2, startY + 340, 'New User? Register Here', { fontSize: '22px', fill: '#0F0', fontStyle: 'bold' }).setOrigin(0.5).setInteractive({useHandCursor:true});
+        c.add(this.createBtn(w/2, startY + 260, 'LOGIN', 0xFFD700, '#000', this.handleLogin.bind(this)));
+        
+        const reg = this.add.text(w/2, startY + 340, 'New User? Register Here', { fontSize: '22px', fill: '#FFF', fontStyle: 'bold' }).setOrigin(0.5).setInteractive({useHandCursor:true});
         reg.on('pointerdown', () => { this.loginContainer.setVisible(false); this.regContainer.setVisible(true); });
         c.add(reg); return c;
     }
@@ -136,7 +141,8 @@ class LoginScene extends Phaser.Scene {
         c.add(this.createInputField(w/2, startY + 140, 'Username', 'newUsername', false));
         c.add(this.createInputField(w/2, startY + 210, 'Password', 'newPassword', true));
         c.add(this.createInputField(w/2, startY + 280, 'Referral Code (Opt)', 'refCode', false));
-        c.add(this.createBtn(w/2, startY + 370, 'REGISTER', 0x00FF00, this.handleRegistration.bind(this)));
+        c.add(this.createBtn(w/2, startY + 370, 'REGISTER', 0x00AA00, '#FFF', this.handleRegistration.bind(this)));
+        
         const back = this.add.text(w/2, startY + 450, '<< Back to Login', { fontSize: '22px', fill: '#FFD700', fontStyle: 'bold' }).setOrigin(0.5).setInteractive({useHandCursor:true});
         back.on('pointerdown', () => { this.loginContainer.setVisible(true); this.regContainer.setVisible(false); });
         c.add(back); return c;
@@ -146,7 +152,7 @@ class LoginScene extends Phaser.Scene {
         if(!this.username || !this.password) return alert('Enter credentials');
         fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:this.username, password:this.password}) })
         .then(r=>r.json()).then(d=>{ if(d.success) this.scene.start('GameScene', {user:d.user}); else alert(d.message); })
-        .catch(()=>alert("Connection Failed"));
+        .catch(()=>alert("Server Error"));
     }
     
     handleRegistration() {
@@ -157,7 +163,7 @@ class LoginScene extends Phaser.Scene {
 }
 
 // =======================================================
-// Scene 2: Game Scene (Updated)
+// Scene 2: Game Scene
 // =======================================================
 class GameScene extends Phaser.Scene {
     constructor() {
@@ -182,12 +188,13 @@ class GameScene extends Phaser.Scene {
         this.isSpinning = false; this.currentBet = 10.00; this.reelsStopped = 0;
         const { width, height } = this.scale;
         
-        // 1. Background Image
+        // 1. Background (Fixed)
         this.add.image(width/2, height/2, 'background').setDisplaySize(width, height);
 
-        // --- Grid System ---
+        // Grid Assets
         const maskShape = this.make.graphics().fillStyle(0xffffff).fillRect(START_X-LAYOUT.REEL_WIDTH/2-5, LAYOUT.START_Y-LAYOUT.SYMBOL_HEIGHT/2-5, TOTAL_GRID_WIDTH+10, (LAYOUT.SYMBOL_HEIGHT*ROW_COUNT)+(LAYOUT.GAP*ROW_COUNT)+20);
         const gridMask = maskShape.createGeometryMask();
+        
         const frameCenterY = LAYOUT.START_Y + ((ROW_COUNT-1)*(LAYOUT.SYMBOL_HEIGHT+LAYOUT.GAP))/2;
         this.add.image(width/2, frameCenterY, 'reel_frame_img').setDisplaySize(TOTAL_GRID_WIDTH+50, (LAYOUT.SYMBOL_HEIGHT*ROW_COUNT)+60).setDepth(0); 
         
@@ -204,7 +211,6 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Header & Notice
         this.add.text(width/2, 80, 'SuperAce', { font: 'bold 48px Arial', fill: '#FFD700', stroke: '#000', strokeThickness: 4 }).setOrigin(0.5); 
         this.noticeLabel = this.add.text(width, 140, "Welcome!", { font: '20px Arial', fill: '#0F0', backgroundColor: '#000' }).setOrigin(0, 0.5);
         this.tweens.add({ targets: this.noticeLabel, x: -600, duration: 12000, repeat: -1 });
@@ -225,9 +231,10 @@ class GameScene extends Phaser.Scene {
         this.add.image(width-80, uiY-60, 'plus_button').setScale(0.25).setInteractive().on('pointerdown', () => this.adjustBet(1));
         this.add.image(width-80, uiY+60, 'minus_button').setScale(0.25).setInteractive().on('pointerdown', () => this.adjustBet(-1));
         this.betAdjustText = this.add.text(width-80, uiY+5, `Tk ${this.currentBet}`, { fontSize: '24px', fill: '#FFF' }).setOrigin(0.5).setDepth(50);
+        
         this.balanceText = this.add.text(20, height-40, `Tk ${this.balance.toFixed(2)}`, { fontSize: '20px', fill: '#FFF' }).setDepth(50);
         
-        // Menu Button (Top Layer)
+        // Menu Button
         this.menuButton = this.add.text(20, 40, '≡', { fontSize: '50px', fill: '#FFF' }).setOrigin(0, 0.5).setInteractive().setDepth(1000); 
         this.menuButton.on('pointerdown', this.toggleMenu, this);
 
@@ -240,7 +247,6 @@ class GameScene extends Phaser.Scene {
     fetchSettings() { fetch('/api/settings').then(r=>r.json()).then(d => this.noticeLabel.setText(d.notice)); }
     refreshUserData() { if(this.isSpinning) return; fetch(`/api/user-data?username=${this.currentUser.username}`).then(r=>r.json()).then(d=>{ if(d.success) { this.balance = d.balance; this.updateUI(); if(d.isBanned) location.reload(); } }); }
 
-    // --- SPIN LOGIC ---
     startSpin() {
         if (this.balance < this.currentBet) { alert('Insufficient Balance!'); this.showDepositPanel(); return; }
         if (this.isSpinning) return; 
@@ -284,12 +290,21 @@ class GameScene extends Phaser.Scene {
             
             if (win > 0) {
                 try { this.sound.play('win_sound'); } catch(e){}
-                this.centerWinText.setText(`WIN: Tk ${win}`).setVisible(true);
+                this.showWinAnimation(win);
                 fetch('/api/update-balance', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:this.currentUser.username, amount: win}) })
                 .then(r=>r.json()).then(d => { this.balance = d.newBalance; this.updateUI(); });
-                this.time.delayedCall(2000, () => this.centerWinText.setVisible(false));
             }
         }
+    }
+
+    showWinAnimation(amount) {
+        const particles = this.add.particles(this.scale.width/2, 0, 'coin', {
+            speed: { min: 200, max: 400 }, angle: { min: 80, max: 100 }, scale: { start: 0.5, end: 0.5 }, gravityY: 300, lifespan: 3000, quantity: 10
+        });
+        this.time.delayedCall(3000, () => particles.destroy());
+        this.centerWinText.setText(`WIN: Tk ${amount}`).setVisible(true).setScale(0);
+        this.tweens.add({ targets: this.centerWinText, scale: 1.2, duration: 300, yoyo: true, repeat: 2 });
+        this.time.delayedCall(3000, () => this.centerWinText.setVisible(false));
     }
 
     checkWin(grid) {
@@ -320,35 +335,64 @@ class GameScene extends Phaser.Scene {
         return grid;
     }
 
-    // --- UPDATED MENU ---
+    // --- MENU SYSTEM ---
     createMenuBar(w, h) {
         const c = this.add.container(-350, 0).setDepth(999); this.menuBar = c;
         c.add(this.add.rectangle(0, h/2, 350, h, 0x111111).setOrigin(0, 0.5).setStrokeStyle(2, 0xFFD700));
         c.add(this.add.text(175, 60, 'PROFILE', { fontSize: '40px', fill: '#FFD700', fontStyle: 'bold' }).setOrigin(0.5));
         
-        // Wallet Info in Menu
         this.menuBalance = this.add.text(175, 120, `Bal: Tk ${this.balance.toFixed(2)}`, { fontSize: '20px', fill: '#FFF' }).setOrigin(0.5);
-        const myRef = this.add.text(175, 150, `Ref Code: ${this.currentUser.myCode || 'N/A'}`, { fontSize: '18px', fill: '#0F0' }).setOrigin(0.5);
-        c.add([this.menuBalance, myRef]);
+        c.add(this.menuBalance);
+        
+        // Show Referral Code
+        const refCode = this.add.text(175, 150, `My Ref Code: ${this.currentUser.myCode || 'N/A'}`, { fontSize: '18px', fill: '#0F0' }).setOrigin(0.5);
+        c.add(refCode);
 
         let y = 200;
-        c.add(this.createGlossyBtn(175, y, 'DEPOSIT', 0x00FF00, ()=>this.showDepositPanel())); y+=80;
-        c.add(this.createGlossyBtn(175, y, 'WITHDRAW', 0xFFA500, ()=>this.showWithdrawPanel())); y+=80;
-        c.add(this.createGlossyBtn(175, y, 'BET HISTORY', 0x00AAFF, ()=>this.showHistoryPanel('Bets'))); y+=80;
+        const btns = [
+            {t: 'DEPOSIT', c: 0x00FF00, cb: ()=>this.showDepositPanel()},
+            {t: 'WITHDRAW', c: 0xFFA500, cb: ()=>this.showWithdrawPanel()},
+            {t: 'HISTORY', c: 0x00AAFF, cb: ()=>this.showHistoryPanel()},
+            {t: 'GAME RULES', c: 0xFFFFFF, cb: ()=>this.showRulesPanel()},
+            {t: 'REFER & EARN', c: 0xE2136E, cb: ()=>this.showReferralInfo()}
+        ];
+        btns.forEach(b => { c.add(this.createGlossyBtn(175, y, b.t, b.c, b.cb)); y+=70; });
 
         if(this.isAdmin) {
             c.add(this.add.text(175, y+20, 'DASHBOARD', {fontSize:'24px', fill:'#F00'}).setOrigin(0.5)); y+=60;
             c.add(this.createGlossyBtn(175, y, 'ADMIN PANEL', 0x555555, ()=>this.showAdminDashboard())); y+=80;
         }
-        c.add(this.createGlossyBtn(175, h-100, 'LOGOUT', 0xFF0000, ()=>location.reload()));
+        c.add(this.createGlossyBtn(175, h-80, 'LOGOUT', 0xFF0000, ()=>location.reload()));
     }
 
     createGlossyBtn(x, y, text, color, cb) {
-        const bg = this.add.rectangle(0, 0, 220, 60, color).setInteractive({useHandCursor:true});
-        const txt = this.add.text(0, 0, text, { fontSize: '24px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
+        const bg = this.add.rectangle(0, 0, 220, 55, color).setInteractive({useHandCursor:true});
+        const txt = this.add.text(0, 0, text, { fontSize: '20px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
         const c = this.add.container(x, y, [bg, txt]);
         bg.on('pointerdown', () => { this.tweens.add({targets:c, scale:0.9, yoyo:true, duration:50}); this.toggleMenu(); this.time.delayedCall(150, cb); });
         return c;
+    }
+
+    showReferralInfo() {
+        this.showInfoPanel("REFERRAL SYSTEM", `
+Your Code: ${this.currentUser.myCode || 'N/A'}
+
+1. Share this code with friends.
+2. When they register using your code:
+   👉 You get 200 Tk Bonus!
+   👉 You earn 10% commission on every deposit!
+`);
+    }
+
+    showRulesPanel() {
+        this.showInfoPanel("GAME RULES", `
+1. Use valid Bkash/Nagad number.
+2. Minimum Deposit: Tk 50
+3. Minimum Withdraw: Tk 100
+4. Do NOT use fake TrxID (Ban risk).
+5. One account per person.
+6. Server decision is final.
+`);
     }
 
     // --- CONSOLIDATED ADMIN DASHBOARD ---
@@ -369,7 +413,7 @@ class GameScene extends Phaser.Scene {
         tools.forEach(t => { c.add(this.createGlossyBtn(0, y, t.t, 0xFFFFFF, t.cb)); y+=80; });
     }
 
-    // --- PAYMENTS & HISTORY (FILTERED) ---
+    // --- PAYMENTS & HISTORY ---
     showDepositPanel() { this.showPaymentModal('DEPOSIT', 0xE2136E, 0xF58220); }
     showWithdrawPanel() { this.showPaymentModal('WITHDRAW', 0xE2136E, 0xF58220); }
 
@@ -380,11 +424,9 @@ class GameScene extends Phaser.Scene {
         c.add(this.add.rectangle(0,0,480,600,0xFFFFFF).setStrokeStyle(4,type==='DEPOSIT'?0x00FF00:0xF00));
         c.add(this.add.text(0,-250,`${type} METHOD`,{fontSize:'32px',fill:'#000',fontStyle:'bold'}).setOrigin(0.5));
         
-        // Method Buttons
         const b1 = this.add.text(0,-150," bKash ",{fontSize:'32px',backgroundColor:'#E2136E',padding:15}).setOrigin(0.5).setInteractive({useHandCursor:true}).on('pointerdown',()=>{c.destroy();this.initTransaction(type,'bKash');});
         const b2 = this.add.text(0,-50," Nagad ",{fontSize:'32px',backgroundColor:'#F58220',padding:15}).setOrigin(0.5).setInteractive({useHandCursor:true}).on('pointerdown',()=>{c.destroy();this.initTransaction(type,'Nagad');});
         
-        // History Filter Button Inside Panel
         const hBtn = this.add.text(0, 100, ` ${type} HISTORY `, {fontSize:'24px',backgroundColor:'#00AAFF',padding:10}).setOrigin(0.5).setInteractive({useHandCursor:true});
         hBtn.on('pointerdown', ()=>{ c.destroy(); this.showHistoryPanel(type); });
 
@@ -395,8 +437,6 @@ class GameScene extends Phaser.Scene {
     initTransaction(type, method) {
         const amount = parseFloat(prompt(`Enter Amount:`));
         if(!amount) return;
-        // ... (Verification logic remains same as previous, using verification panel)
-        // Calling short version for brevity, ensure previous verification logic is used
         const trx = type==='DEPOSIT' ? prompt("Enter TrxID:") : 'N/A';
         const phone = type==='DEPOSIT' ? this.currentUser.mobile : prompt("Wallet Number:");
         if(phone) {
@@ -409,38 +449,72 @@ class GameScene extends Phaser.Scene {
         const { width, height } = this.scale;
         const c = this.add.container(width/2, height/2).setDepth(300);
         c.add(this.add.rectangle(0,0,480,700,0x111111).setStrokeStyle(2,0xFFFFFF));
-        c.add(this.add.text(0,-320,`${filterType} LOGS`,{fontSize:'28px',fill:'#FFF'}).setOrigin(0.5));
+        c.add(this.add.text(0,-320,`${filterType||'ALL'} LOGS`,{fontSize:'28px',fill:'#FFF'}).setOrigin(0.5));
         this.addCloseButton(c, ()=>c.destroy(), 320);
 
-        if(filterType === 'Bets') {
-            c.add(this.add.text(0,0,"Betting logs coming soon...",{fontSize:'20px',fill:'#AAA'}).setOrigin(0.5));
-        } else {
-            fetch(`/api/history?username=${this.currentUser.username}`).then(r=>r.json()).then(d => {
-                let y=-250;
-                // Filter logic
-                const list = filterType ? d.filter(i=>i.type.toUpperCase()===filterType.toUpperCase()) : d;
-                list.slice(0,8).forEach(h=>{
-                    c.add(this.add.text(-200,y,`${h.type} | Tk ${h.amount} | ${h.status}`,{fontSize:'16px',fill:h.status==='Success'?'#0F0':'#FFF'}));
-                    y+=60;
-                });
+        fetch(`/api/history?username=${this.currentUser.username}`).then(r=>r.json()).then(d => {
+            let y=-250;
+            const list = filterType ? d.filter(i=>i.type.toUpperCase()===filterType.toUpperCase()) : d;
+            list.slice(0,8).forEach(h=>{
+                c.add(this.add.text(-200,y,`${h.type} | Tk ${h.amount} | ${h.status}`,{fontSize:'16px',fill:h.status==='Success'?'#0F0':'#FFF'}));
+                y+=60;
             });
-        }
+        });
     }
 
-    // --- ADMIN PANELS (Standard) ---
-    showUserListPanel() { /* Same as previous */ }
-    showAdminRequestsPanel(type) { /* Same as previous */ }
-    handleAdminAction(id, action, req, panel, type) { /* Same as previous */ }
+    showUserListPanel() {
+        const { width, height } = this.scale;
+        const c = this.add.container(width/2, height/2).setDepth(500);
+        c.add(this.add.rectangle(0, 0, 520, 800, 0x222222).setStrokeStyle(2, 0xFFD700));
+        c.add(this.add.text(0, -350, "USER MANAGEMENT", { fontSize: '28px', fill: '#FFD700' }).setOrigin(0.5));
+        this.addCloseButton(c, ()=>c.destroy(), 350);
+        fetch('/api/admin/users').then(r=>r.json()).then(users => {
+            let y = -280;
+            users.slice(0, 8).forEach(u => {
+                if(u.username === 'admin') return;
+                c.add(this.add.text(-240, y, `${u.username} | Tk ${u.balance}`, { fontSize: '18px', fill: '#FFF' }));
+                const btn = this.add.text(200, y, u.isBanned?"UNBAN":"BAN", { fontSize: '16px', fill: '#FFF', backgroundColor: u.isBanned ? '#0A0' : '#F00' }).setOrigin(0.5).setInteractive({useHandCursor:true});
+                btn.on('pointerdown', () => fetch('/api/admin/ban-user', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username: u.username, banStatus: !u.isBanned })}).then(()=>{c.destroy();this.showUserListPanel();}));
+                c.add(btn); y += 60;
+            });
+        });
+    }
+
+    showAdminRequestsPanel(type) {
+        const { width, height } = this.scale;
+        const c = this.add.container(width/2, height/2).setDepth(500);
+        c.add(this.add.rectangle(0, 0, 520, 800, 0x222222).setStrokeStyle(2, 0xFFD700));
+        c.add(this.add.text(0, -350, `${type} REQ`, { fontSize: '28px', fill: '#FFD700' }).setOrigin(0.5));
+        this.addCloseButton(c, ()=>c.destroy(), 350);
+        fetch('/api/admin/transactions').then(r=>r.json()).then(data => {
+            const list = data.filter(t => t.status === 'Pending' && t.type === type);
+            if(list.length === 0) return c.add(this.add.text(0, 0, "No Requests", { fontSize: '20px', fill: '#AAA' }).setOrigin(0.5));
+            let y = -250;
+            list.slice(0, 6).forEach(req => {
+                c.add(this.add.text(-230, y, `${req.username} | ${req.amount}`, { fontSize: '18px', fill: '#FFF' }));
+                const ok = this.add.text(100, y, "✔", { fontSize: '24px', backgroundColor: '#0A0', padding: 5 }).setInteractive({useHandCursor:true}).on('pointerdown', () => this.handleAdminAction(req.trx||req.phone, 'approve', req, c, type));
+                const no = this.add.text(160, y, "X", { fontSize: '24px', backgroundColor: '#F00', padding: 5 }).setInteractive({useHandCursor:true}).on('pointerdown', () => this.handleAdminAction(req.trx||req.phone, 'reject', req, c, type));
+                c.add([ok, no]); y += 80;
+            });
+        });
+    }
+
+    handleAdminAction(id, action, req, panel, type) {
+        fetch('/api/admin/action', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ trxId: id, action, type: req.type, amount: req.amount, username: req.username }) }).then(() => { panel.destroy(); this.showAdminRequestsPanel(type); });
+    }
 
     addCloseButton(c, cb, y) {
-        const b = this.add.text(0, y, " CLOSE ", { fontSize: '24px', fill: '#FFF', backgroundColor: '#F00', padding: 10 }).setOrigin(0.5).setInteractive({useHandCursor:true});
+        const b = this.add.text(0, y, "CLOSE", { fontSize: '24px', fill: '#FFF', backgroundColor: '#F00', padding: 10 }).setOrigin(0.5).setInteractive({useHandCursor:true});
         b.on('pointerdown', cb); c.add(b);
     }
+
+    showInfoPanel(t, content) { alert(`${t}\n\n${content}`); }
 
     updateUI() { 
         if(this.balanceText) this.balanceText.setText(`Tk ${this.balance.toFixed(2)}`); 
         if(this.menuBalance) this.menuBalance.setText(`Bal: Tk ${this.balance.toFixed(2)}`);
+        if(this.betAdjustText) this.betAdjustText.setText(`Tk ${this.currentBet}`);
     }
-    adjustBet(n) { let b=this.currentBet+n; if(b>=1 && b<=1000){this.currentBet=b; this.betAdjustText.setText(`Tk ${this.currentBet}`);} }
+    adjustBet(n) { let b=this.currentBet+n; if(b>=1 && b<=1000){this.currentBet=b; this.updateUI();} }
     toggleMenu() { this.isMenuOpen=!this.isMenuOpen; this.tweens.add({targets:this.menuBar, x:this.isMenuOpen?0:-350, duration:300}); }
 }
