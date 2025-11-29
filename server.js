@@ -8,7 +8,6 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// আপনার MongoDB কানেকশন স্ট্রিং
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://tmtohin177:superace123@cluster0.nsyah8t.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
 app.use(cors());
@@ -27,8 +26,8 @@ const UserSchema = new mongoose.Schema({
     balance: { type: Number, default: 0.00 },
     isAdmin: { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
-    referredBy: { type: String, default: null },
-    totalReferralBonus: { type: Number, default: 0.00 }
+    referredBy: { type: String, default: null }, 
+    totalReferralBonus: { type: Number, default: 0.00 } 
 });
 const User = mongoose.model('User', UserSchema);
 
@@ -40,11 +39,10 @@ const TransactionSchema = new mongoose.Schema({
 });
 const Transaction = mongoose.model('Transaction', TransactionSchema);
 
-// গেম সেটিংস (নোটিশ বোর্ড ইত্যাদির জন্য)
+// Settings Schema (Notice Board)
 const SettingsSchema = new mongoose.Schema({
     id: { type: String, default: 'global' },
-    notice: { type: String, default: 'Welcome to SuperAce! Enjoy the game.' },
-    isMaintenance: { type: Boolean, default: false }
+    notice: { type: String, default: 'Welcome to SuperAce! Good Luck!' }
 });
 const Settings = mongoose.model('Settings', SettingsSchema);
 
@@ -58,17 +56,17 @@ async function initAdmin() {
         console.log("🔥 Admin Account Ready!");
     }
     // Init Settings
-    const settingsExists = await Settings.findOne({ id: 'global' });
-    if (!settingsExists) await new Settings({ id: 'global' }).save();
+    const setExists = await Settings.findOne({ id: 'global' });
+    if (!setExists) await new Settings({ id: 'global' }).save();
 }
 initAdmin();
 
 // --- ROUTES ---
 
-// 1. Get Settings (Notice Board)
+// 1. Get Settings
 app.get('/api/settings', async (req, res) => {
-    const s = await Settings.findOne({ id: 'global' });
-    res.json(s);
+    try { const s = await Settings.findOne({ id: 'global' }); res.json(s); } 
+    catch { res.json({ notice: '' }); }
 });
 
 // 2. Login
@@ -161,66 +159,7 @@ app.post('/api/update-balance', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false }); }
 });
 
-// --- ADMIN ROUTES ---
-
-app.post('/api/admin/action', async (req, res) => {
-    const { trxId, action, type, amount, username } = req.body;
-    try {
-        const trx = await Transaction.findOne({ $or: [{ trx: trxId }, { phone: trxId }], status: 'Pending' });
-        if (trx) {
-            trx.status = action === 'approve' ? 'Success' : 'Failed';
-            trx.seenByAdmin = true;
-            await trx.save();
-            
-            const user = await User.findOne({ username });
-            if (user) {
-                if (action === 'approve' && type === 'Deposit') {
-                    user.balance += amount;
-                    if (user.referredBy) {
-                        const referrer = await User.findOne({ username: user.referredBy });
-                        if (referrer) {
-                            const commission = amount * 0.10;
-                            referrer.balance += commission;
-                            referrer.totalReferralBonus += commission;
-                            await referrer.save();
-                        }
-                    }
-                }
-                if (action === 'reject' && type === 'Withdraw') user.balance += amount;
-                user.balance = parseFloat(user.balance.toFixed(2));
-                await user.save();
-            }
-            res.json({ success: true });
-        } else res.json({ success: false });
-    } catch (err) { res.status(500).json({ success: false }); }
-});
-
-// Profit/Loss & Filtered Stats
-app.get('/api/admin/stats', async (req, res) => {
-    try {
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        
-        const deposits = await Transaction.aggregate([
-            { $match: { type: 'Deposit', status: 'Success', date: { $gte: today } } },
-            { $group: { _id: null, total: { $sum: "$amount" } } }
-        ]);
-        const withdraws = await Transaction.aggregate([
-            { $match: { type: 'Withdraw', status: 'Success', date: { $gte: today } } },
-            { $group: { _id: null, total: { $sum: "$amount" } } }
-        ]);
-
-        const totalDep = deposits.length ? deposits[0].total : 0;
-        const totalWdr = withdraws.length ? withdraws[0].total : 0;
-        
-        res.json({ 
-            deposit: totalDep, 
-            withdraw: totalWdr, 
-            profit: totalDep - totalWdr 
-        });
-    } catch { res.json({ deposit: 0, withdraw: 0, profit: 0 }); }
-});
-
+// --- ADMIN API ---
 app.post('/api/admin/update-notice', async (req, res) => {
     const { notice } = req.body;
     await Settings.updateOne({ id: 'global' }, { notice });
@@ -235,23 +174,45 @@ app.post('/api/admin/reset-password', async (req, res) => {
     res.json({ success: true });
 });
 
-app.get('/api/admin/transactions', async (req, res) => {
-    try { const t = await Transaction.find().sort({ date: -1 }).limit(100); res.json(t); } catch { res.json([]); }
+app.get('/api/admin/stats', async (req, res) => {
+    try {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const dep = await Transaction.aggregate([{ $match: { type: 'Deposit', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
+        const wdr = await Transaction.aggregate([{ $match: { type: 'Withdraw', status: 'Success', date: { $gte: today } } }, { $group: { _id: null, total: { $sum: "$amount" } } }]);
+        res.json({ deposit: dep[0]?.total || 0, withdraw: wdr[0]?.total || 0 });
+    } catch { res.json({ deposit: 0, withdraw: 0 }); }
 });
-app.get('/api/admin/users', async (req, res) => {
-    try { const u = await User.find({}, 'username mobile balance isBanned referredBy').sort({ _id: -1 }); res.json(u); } catch { res.json([]); }
+
+app.post('/api/admin/action', async (req, res) => {
+    const { trxId, action, type, amount, username } = req.body;
+    try {
+        const trx = await Transaction.findOne({ $or: [{ trx: trxId }, { phone: trxId }], status: 'Pending' });
+        if (trx) {
+            trx.status = action === 'approve' ? 'Success' : 'Failed';
+            await trx.save();
+            const user = await User.findOne({ username });
+            if (user) {
+                if (action === 'approve' && type === 'Deposit') {
+                    user.balance += amount;
+                    // Commission
+                    if (user.referredBy) {
+                        const ref = await User.findOne({ username: user.referredBy });
+                        if(ref) { ref.balance += amount * 0.10; await ref.save(); }
+                    }
+                }
+                if (action === 'reject' && type === 'Withdraw') user.balance += amount;
+                user.balance = parseFloat(user.balance.toFixed(2));
+                await user.save();
+            }
+            res.json({ success: true });
+        } else res.json({ success: false });
+    } catch (err) { res.status(500).json({ success: false }); }
 });
-app.post('/api/admin/ban-user', async (req, res) => {
-    const { username, banStatus } = req.body;
-    try { await User.updateOne({ username }, { isBanned: banStatus }); res.json({ success: true }); } catch { res.json({ success: false }); }
-});
-app.get('/api/admin/notifications', async (req, res) => {
-    try { const c = await Transaction.countDocuments({ type: 'Deposit', status: 'Pending', seenByAdmin: false }); res.json({ count: c }); } catch { res.json({ count: 0 }); }
-});
-app.get('/api/history', async (req, res) => {
-    const { username } = req.query;
-    try { const h = await Transaction.find({ username }).sort({ date: -1 }).limit(20); res.json(h); } catch { res.json([]); }
-});
+
+app.get('/api/admin/transactions', async (req, res) => { try { const t = await Transaction.find().sort({ date: -1 }).limit(50); res.json(t); } catch { res.json([]); } });
+app.get('/api/admin/users', async (req, res) => { try { const u = await User.find({}, 'username mobile balance isBanned referredBy').sort({ _id: -1 }); res.json(u); } catch { res.json([]); } });
+app.post('/api/admin/ban-user', async (req, res) => { try { await User.updateOne({ username: req.body.username }, { isBanned: req.body.banStatus }); res.json({ success: true }); } catch { res.json({ success: false }); } });
+app.get('/api/history', async (req, res) => { try { const h = await Transaction.find({ username: req.query.username }).sort({ date: -1 }).limit(20); res.json(h); } catch { res.json([]); } });
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 app.listen(PORT, () => { console.log(`Server running at http://localhost:${PORT}`); });
